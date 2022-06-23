@@ -121,7 +121,7 @@ contract TCKT is IERC721 {
      * @notice Creates a new TCKT with the given social revokers and collects
      * the fee in the native token.
      *
-     * @param handle           IPFS handle of the persisted TCKT
+     * @param handle           IPFS handle of the persisted TCKT.
      * @param revokeThreshold  The total revoke weight needed before this TCKT
      *                         is destroyed.
      * @param revokers         A list of pairs (weight, address), bit packed
@@ -161,13 +161,13 @@ contract TCKT is IERC721 {
      * signature will be invalid. However, the price changes happen at most
      * once a week and off peak hours by an autonomous vote of TCKO holders.
      *
-     * @param token            Contract address of a IERC20Permit token
-     * @param handle           IPFS handle of the persisted TCKT
+     * @param token            Contract address of a IERC20Permit token.
+     * @param handle           IPFS handle of the persisted TCKT.
      * @param deadline         The timestamp until which the payment
      *                         authorization is valid for.
-     * @param v                recovery identifier of the signature
-     * @param r                random curve point of the signature
-     * @param s                mapped curve point of the signature
+     * @param v                recovery identifier of the signature.
+     * @param r                random curve point of the signature.
+     * @param s                mapped curve point of the signature.
      */
     function createWithTokenPayment(
         IERC20Permit token,
@@ -211,7 +211,7 @@ contract TCKT is IERC721 {
      * KimlikDAO and KimlikAŞ.
      *
      * @param humanID          HumanID("KimlikDAO:TCKT:exposure") of the person
-     *                         who reported the private key exposure
+     *                         who reported the private key exposure.
      *
      * TCKT validators are expected to consider all presented TCKTs with
      * the HumanID("KimlikDAO:TCKT:exposure") equaling `humanID` and issuance
@@ -268,8 +268,8 @@ contract TCKT is IERC721 {
      * revoker list and the revoking threshold is needed, use the
      * `updateRevokerAndThreshold()` method.
      *
-     * @param revoker          Address who is given the revoke weight `weight`
-     * @param weight           Weight of the revokers vote
+     * @param revoker          Address who is given the revoke weight `weight`.
+     * @param weight           Weight of the revokers vote.
      */
     function updateRevoker(address revoker, uint256 weight) external {
         revokerWeight[msg.sender][revoker] = weight;
