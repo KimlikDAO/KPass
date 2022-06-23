@@ -82,8 +82,7 @@ contract TCKT is IERC721 {
      */
     function supportsInterface(bytes4 interfaceId)
         public
-        view
-        virtual
+        pure
         override
         returns (bool)
     {
@@ -252,9 +251,11 @@ contract TCKT is IERC721 {
 
         unchecked {
             if (senderWeight >= remaining) {
-                emit Transfer(friend, address(this), handles[friend]);
-                delete handles[friend];
                 delete revokesRemaining[friend];
+                if (handles[friend] != 0) {
+                    emit Transfer(friend, address(this), handles[friend]);
+                    delete handles[friend];
+                }
             } else revokesRemaining[friend] = remaining - senderWeight;
         }
     }
