@@ -12,4 +12,10 @@ interface IERC721 {
     function tokenURI(uint256 tokenId) external view returns (string memory);
 
     function supportsInterface(bytes4 interfaceId) external pure returns (bool);
+
+    event Transfer(
+        address indexed from,
+        address indexed to,
+        uint256 indexed tokenId
+    );
 }

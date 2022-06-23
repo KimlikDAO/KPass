@@ -12,7 +12,7 @@ import "./KimlikDAO.sol";
 contract TCKT is IERC721 {
     address private constant NATIVE_TOKEN = address(0);
 
-    event RevokerAssigned(
+    event RevokerAssignment(
         address indexed owner,
         address indexed revoker,
         uint256 weight
@@ -21,13 +21,8 @@ contract TCKT is IERC721 {
     /// they can either revoke it themselves, or use social revoking.
     /// If they are unable to do either, an exposure report needs to be
     /// filed through a KimlikAŞ authentication.
-    event ExposureReported(bytes32 indexed humanID, uint256 timestamp);
-    event PriceChanged(address indexed token, uint256 price);
-    event Transfer(
-        address indexed from,
-        address indexed to,
-        uint256 indexed tokenId
-    );
+    event ExposureReport(bytes32 indexed humanID, uint256 timestamp);
+    event PriceChange(address indexed token, uint256 price);
 
     mapping(address => uint256) public handles;
     mapping(address => mapping(address => uint256)) public revokerWeight;
@@ -141,7 +136,7 @@ contract TCKT is IERC721 {
             for (uint256 i = 0; i < revokers.length; ++i) {
                 address revoker = address(uint160(revokers[i]));
                 revokerWeight[msg.sender][revoker] = revokers[i] >> 160;
-                emit RevokerAssigned(msg.sender, revoker, revokers[i] >> 160);
+                emit RevokerAssignment(msg.sender, revoker, revokers[i] >> 160);
             }
         }
     }
@@ -219,7 +214,7 @@ contract TCKT is IERC721 {
     function reportExposure(bytes32 humanID) external {
         require(msg.sender == THRESHOLD_2OF2_EXPOSURE_LIST_WRITER);
         exposureReported[humanID] = block.timestamp;
-        emit ExposureReported(humanID, block.timestamp);
+        emit ExposureReport(humanID, block.timestamp);
     }
 
     /**
@@ -261,46 +256,19 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice Add a revoker or update a revokers weight.
+     * @notice Add a revoker or increase a revokers weight.
      *
-     * A user can adjust their social revoker list and their weight using this
-     * method. Note this method does not change the users `revokesRemaining`,
-     * which may need to be adjusted separately. If a change to both the
-     * revoker list and the revoking threshold is needed, use the
-     * `updateRevokerAndThreshold()` method.
-     *
-     * @param revoker          Address who is given the revoke weight `weight`.
-     * @param weight           Weight of the revokers vote.
+     * @param revoker          Address who is given the revoke vote permission.
+     * @param add              Additional weight given to the revoker.
      */
-    function updateRevoker(address revoker, uint256 weight) external {
-        revokerWeight[msg.sender][revoker] = weight;
-        emit RevokerAssigned(msg.sender, revoker, weight);
+    function addRevoker(address revoker, uint256 add) external {
+        uint256 weight = revokerWeight[msg.sender][revoker] + add;
+        revokerWeight[msg.sender][revoker] += weight;
+        emit RevokerAssignment(msg.sender, revoker, weight);
     }
 
-    /**
-     * @notice Remove a revoker.
-     *
-     * Note this does not adjust the `remainingRevokers` for the user.
-     * Therefore after removing a revoker, social revoking may not work
-     * unless the users adjusts the `revokesRemaining`.
-     */
-    function removeRevoker(address revoker) external {
-        delete revokerWeight[msg.sender][revoker];
-        emit RevokerAssigned(msg.sender, revoker, 0);
-    }
-
-    function setRevokeThreshold(uint256 threshold) external {
-        revokesRemaining[msg.sender] = threshold;
-    }
-
-    function setRevokerAndThreshold(
-        address revoker,
-        uint256 weight,
-        uint256 threshold
-    ) external {
-        revokerWeight[msg.sender][revoker] = weight;
-        emit RevokerAssigned(msg.sender, revoker, weight);
-        revokesRemaining[msg.sender] = threshold;
+    function reduceRevokeThreshold(uint256 reduce) external {
+        revokesRemaining[msg.sender] -= reduce;
     }
 
     /**
@@ -318,7 +286,7 @@ contract TCKT is IERC721 {
             for (uint256 i = 0; i < prices.length; ++i) {
                 address token = address(uint160(prices[i]));
                 priceIn[token] = prices[i] >> 160;
-                emit PriceChanged(token, prices[i] >> 160);
+                emit PriceChange(token, prices[i] >> 160);
             }
         }
     }
@@ -334,6 +302,16 @@ contract TCKT is IERC721 {
     function updatePrice(address token, uint256 price) external {
         require(msg.sender == KIMLIKDAO_PRICE_FEEDER);
         priceIn[token] = price;
-        emit PriceChanged(token, price);
+        emit PriceChange(token, price);
+    }
+
+    /**
+     * Move ERC20 tokens sent to this address by accident to `DAO_KASASI`.
+     */
+    function rescueToken(IERC20 token) external {
+        // We restrict this method to `DEV_KASASI` only, as we call a method of
+        // an unkown contract, which could potentially be a security risk.
+        require(msg.sender == DEV_KASASI);
+        token.transfer(DAO_KASASI, token.balanceOf(address(this)));
     }
 }
