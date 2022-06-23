@@ -18,7 +18,7 @@ contract TCKT is IERC721 {
     /// @notice When a TCKT holder gets their wallet private key exposed
     /// they can either revoke it themselves, or use social revoking.
     /// If they are unable to do either, an exposure report needs to be
-    /// done through KimlikAŞ authentication.
+    /// filed through a KimlikAŞ authentication.
     event ExposureReported(bytes32 indexed humanID, uint256 timestamp);
     event PriceChanged(address indexed token, uint256 price);
     event Transfer(
@@ -30,13 +30,10 @@ contract TCKT is IERC721 {
     mapping(address => uint256) public handles;
     mapping(address => mapping(address => uint256)) public revokerWeight;
     mapping(address => uint256) public revokesRemaining;
-    /// @notice The number of TCKTs issued minus the revoked ones.
-    /// Note this number also includes TCKT issued but later put into the
-    /// exposed list.
-    uint256 public totalSupply;
 
     /// @notice The price of a TCKT in a given IERC20Permit token.
-    /// The price of a TCKT in AVAX is represented by `priceIn[address(0)]`.
+    /// The price of a TCKT in the networks native token is represented by
+    /// `priceIn[address(0)]`.
     mapping(address => uint256) public priceIn;
 
     // Maps a HumanID("KimlikDAO:TCKT:exposure") to a reported exposure
@@ -83,8 +80,8 @@ contract TCKT is IERC721 {
 
     /**
      * @notice To minimize gas fees for TCKT buyers to the maximum extent, we
-     * do not forward fees collected in AVAX to `DAO_KASASI` in each TCKT
-     * creation.
+     * do not forward fees collected in networks native token to `DAO_KASASI`
+     * in each TCKT creation.
      *
      * Instead, the following method gives any one the right to transfer the
      * entire balance of this contract to `DAO_KASASI` at any time.
@@ -92,7 +89,7 @@ contract TCKT is IERC721 {
      * Further, KimlikDAO does daily sweeps, again using this method and
      * covering the gas fee.
      */
-    function sweepAVAX() external {
+    function sweepNativeToken() external {
         DAO_KASASI.transfer(address(this).balance);
     }
 
@@ -137,7 +134,8 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice This can be invoked only by a 2-of-2 threshold signature of
+     * @notice Add a HumanID("KimlikDAO:TCKT:exposure") to exposed list.
+     * This can be invoked only by a 2-of-2 threshold signature of
      * KimlikDAO and KimlikAŞ.
      *
      * @param humanID    HumanID("KimlikDAO:TCKT:exposure") of the person who
@@ -170,7 +168,7 @@ contract TCKT is IERC721 {
                 emit Transfer(other, address(this), handles[other]);
                 delete handles[other];
                 delete revokesRemaining[other];
-            } else revokesRemaining[other] = senderWeight - remaining;
+            } else revokesRemaining[other] = remaining - senderWeight;
         }
     }
 
