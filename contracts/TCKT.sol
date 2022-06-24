@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.15;
+pragma solidity 0.8.15;
 
-import "./IERC20Permit.sol";
-import "./IERC721.sol";
-import "./KimlikDAO.sol";
+import "interfaces/Addresses.sol";
+import "interfaces/IERC20Permit.sol";
+import "interfaces/IERC721.sol";
 
 /**
  * @title KimlikDAO TCKT contract.
@@ -56,7 +56,7 @@ contract TCKT is IERC721 {
      * @notice The URI of a given TCKT.
      *
      * Note the tokenID of a TCKT is simply a compact representation of its
-     * IPFS handle so we simply prepend the tokenID with "ipfs://Qm".
+     * IPFS handle so we simply base58 encode the array [0x12,0x20,tokenID].
      */
     function tokenURI(uint256 tokenID)
         external
@@ -64,6 +64,7 @@ contract TCKT is IERC721 {
         override
         returns (string memory)
     {
+        // TODO(KimlikDAO-bot): Add base58 encoder.
         return
             string.concat(
                 "ipfs://Qm",
