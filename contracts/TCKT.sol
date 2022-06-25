@@ -56,7 +56,7 @@ contract TCKT is IERC721 {
      * @notice The URI of a given TCKT.
      *
      * Note the tokenID of a TCKT is simply a compact representation of its
-     * IPFS handle so we simply base58 encode the array [0x12,0x20,tokenID].
+     * IPFS handle so we simply base58 encode the array [0x12, 0x20, tokenID].
      */
     function tokenURI(uint256 id)
         external
@@ -68,16 +68,20 @@ contract TCKT is IERC721 {
             bytes memory toChar = bytes(
                 "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
             );
-            bytes
-                memory offset = hex"172C151325290607391D2C391B242225180A020B291B260929391D1B31222525202804120031280917120B280400";
-            bytes memory output = new bytes(46);
-
-            for (uint256 p = 46; p-- > 0; ) {
-                uint256 t = id + uint256(uint8(offset[p]));
-                output[p] = toChar[t % 58];
+            uint256 magic = 0x04e5a461f976ce5b9229582822e96e6269e5d6f18a5960a04480c6825748ba04;
+            bytes memory out = new bytes(46);
+            out[45] = toChar[id % 58];
+            id /= 58;
+            for (uint256 p = 44; p > 2; --p) {
+                uint256 t = id + (magic & 63);
+                out[p] = toChar[t % 58];
+                magic >>= 6;
                 id = t / 58;
             }
-            return string(output);
+            out[2] = toChar[id + 21];
+            out[1] = "m";
+            out[0] = "Q";
+            return string(out);
         }
     }
 
