@@ -13,13 +13,13 @@ contract TCKTTest is Test {
             tckt.tokenURI(
                 0x3d5bad4604650569f28733f7ad6ec22835e775a0eb20bfd809d78ed2ae8abe47
             ),
-            "QmSUAf9gusxTbZZn5nC7d44kHjfrDeu2gfSY31MRVET28n"
+            "ipfs://QmSUAf9gusxTbZZn5nC7d44kHjfrDeu2gfSY31MRVET28n"
         );
         assertEq(
             tckt.tokenURI(
                 0xd2abff978646ac494f499e9ecd6873414a0c6105196c8c2580d52769f3fc0523
             ),
-            "QmcX2ScFVAVnEHrMk3xuf7HXfiGHzmMqdpAYb37zA5mbFp"
+            "ipfs://QmcX2ScFVAVnEHrMk3xuf7HXfiGHzmMqdpAYb37zA5mbFp"
         );
     }
 }

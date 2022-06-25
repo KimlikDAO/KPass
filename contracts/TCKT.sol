@@ -69,18 +69,16 @@ contract TCKT is IERC721 {
                 "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
             );
             uint256 magic = 0x04e5a461f976ce5b9229582822e96e6269e5d6f18a5960a04480c6825748ba04;
-            bytes memory out = new bytes(46);
-            out[45] = toChar[id % 58];
+            bytes memory out = "ipfs://Qm____________________________________________";
+            out[52] = toChar[id % 58];
             id /= 58;
-            for (uint256 p = 44; p > 2; --p) {
+            for (uint256 p = 51; p > 9; --p) {
                 uint256 t = id + (magic & 63);
                 out[p] = toChar[t % 58];
                 magic >>= 6;
                 id = t / 58;
             }
-            out[2] = toChar[id + 21];
-            out[1] = "m";
-            out[0] = "Q";
+            out[9] = toChar[id + 21];
             return string(out);
         }
     }
