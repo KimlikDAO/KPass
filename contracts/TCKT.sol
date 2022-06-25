@@ -52,7 +52,18 @@ contract TCKT is IERC721 {
         return handles[addr] == 0 ? 0 : 1;
     }
 
-    function toCID(uint256 a) public pure returns (string memory) {
+    /**
+     * @notice The URI of a given TCKT.
+     *
+     * Note the tokenID of a TCKT is simply a compact representation of its
+     * IPFS handle so we simply base58 encode the array [0x12,0x20,tokenID].
+     */
+    function tokenURI(uint256 id)
+        external
+        pure
+        override
+        returns (string memory)
+    {
         unchecked {
             bytes memory toChar = bytes(
                 "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -62,27 +73,12 @@ contract TCKT is IERC721 {
             bytes memory output = new bytes(46);
 
             for (uint256 p = 46; p-- > 0; ) {
-                uint256 t = a + uint256(uint8(offset[p]));
+                uint256 t = id + uint256(uint8(offset[p]));
                 output[p] = toChar[t % 58];
-                a = t / 58;
+                id = t / 58;
             }
             return string(output);
         }
-    }
-
-    /**
-     * @notice The URI of a given TCKT.
-     *
-     * Note the tokenID of a TCKT is simply a compact representation of its
-     * IPFS handle so we simply base58 encode the array [0x12,0x20,tokenID].
-     */
-    function tokenURI(uint256 tokenID)
-        external
-        pure
-        override
-        returns (string memory)
-    {
-        return toCID(tokenID);
     }
 
     /**
