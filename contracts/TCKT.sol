@@ -52,6 +52,24 @@ contract TCKT is IERC721 {
         return handles[addr] == 0 ? 0 : 1;
     }
 
+    function toCID(uint256 a) public pure returns (string memory) {
+        unchecked {
+            bytes memory toChar = bytes(
+                "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+            );
+            bytes
+                memory offset = hex"172C151325290607391D2C391B242225180A020B291B260929391D1B31222525202804120031280917120B280400";
+            bytes memory output = new bytes(46);
+
+            for (uint256 p = 46; p-- > 0; ) {
+                uint256 t = a + uint256(uint8(offset[p]));
+                output[p] = toChar[t % 58];
+                a = t / 58;
+            }
+            return string(output);
+        }
+    }
+
     /**
      * @notice The URI of a given TCKT.
      *
@@ -64,12 +82,7 @@ contract TCKT is IERC721 {
         override
         returns (string memory)
     {
-        // TODO(KimlikDAO-bot): Add base58 encoder.
-        return
-            string.concat(
-                "ipfs://Qm",
-                string(abi.encodePacked(bytes32(tokenID)))
-            );
+        return toCID(tokenID);
     }
 
     /**
