@@ -68,7 +68,7 @@ contract TCKT is IERC721 {
             bytes memory toChar = bytes(
                 "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
             );
-            uint256 magic = 0x04e5a461f976ce5b9229582822e96e6269e5d6f18a5960a04480c6825748ba04;
+            uint256 magic = 0x4e5a461f976ce5b9229582822e96e6269e5d6f18a5960a04480c6825748ba04;
             bytes memory out = "ipfs://Qm____________________________________________";
             out[52] = toChar[id % 58];
             id /= 58;
