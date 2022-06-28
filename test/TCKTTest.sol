@@ -40,11 +40,11 @@ contract TCKTTest is Test {
 
     function testSocialRevoke() public {
         uint256[] memory revokers = new uint256[](5);
-        revokers[0] = uint256(1) << 160 | uint160(vm.addr(10));
-        revokers[1] = uint256(1) << 160 | uint160(vm.addr(11));
-        revokers[2] = uint256(1) << 160 | uint160(vm.addr(12));
-        revokers[3] = uint256(1) << 160 | uint160(vm.addr(13));
-        revokers[4] = uint256(1) << 160 | uint160(vm.addr(14));
+        revokers[0] = (uint256(1) << 160) | uint160(vm.addr(10));
+        revokers[1] = (uint256(1) << 160) | uint160(vm.addr(11));
+        revokers[2] = (uint256(1) << 160) | uint160(vm.addr(12));
+        revokers[3] = (uint256(1) << 160) | uint160(vm.addr(13));
+        revokers[4] = (uint256(1) << 160) | uint160(vm.addr(14));
         tckt.createWithRevokers(123123123, 4, revokers);
 
         assertEq(tckt.balanceOf(address(this)), 1);
@@ -62,6 +62,41 @@ contract TCKTTest is Test {
         tckt.revokeFriend(address(this));
         assertEq(tckt.balanceOf(address(this)), 1);
         vm.prank(vm.addr(13));
+        tckt.revokeFriend(address(this));
+        assertEq(tckt.balanceOf(address(this)), 0);
+    }
+
+    function testReduceRevokeThreshold() public {
+        uint256[] memory revokers = new uint256[](5);
+        revokers[0] = (uint256(1) << 160) | uint160(vm.addr(10));
+        revokers[1] = (uint256(1) << 160) | uint160(vm.addr(11));
+        revokers[2] = (uint256(1) << 160) | uint160(vm.addr(12));
+        revokers[3] = (uint256(1) << 160) | uint160(vm.addr(13));
+        revokers[4] = (uint256(1) << 160) | uint160(vm.addr(14));
+        tckt.createWithRevokers(123123123, 1, revokers);
+
+        assertEq(tckt.balanceOf(address(this)), 1);
+        tckt.reduceRevokeThreshold(1);
+        assertEq(tckt.balanceOf(address(this)), 1);
+        vm.prank(vm.addr(10));
+        tckt.revokeFriend(address(this));
+        assertEq(tckt.balanceOf(address(this)), 0);
+    }
+
+    function testAddRevoker() public {
+        uint256[] memory revokers = new uint256[](5);
+        revokers[0] = (uint256(1) << 160) | uint160(vm.addr(10));
+        tckt.createWithRevokers(123123123, 4, revokers);
+
+        assertEq(tckt.balanceOf(address(this)), 1);
+        tckt.addRevoker(vm.addr(11), 3);
+        tckt.addRevoker(vm.addr(12), 1);
+
+        vm.prank(vm.addr(11));
+        tckt.revokeFriend(address(this));
+        assertEq(tckt.balanceOf(address(this)), 1);
+
+        vm.prank(vm.addr(12));
         tckt.revokeFriend(address(this));
         assertEq(tckt.balanceOf(address(this)), 0);
     }

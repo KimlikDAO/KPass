@@ -275,7 +275,7 @@ contract TCKT is IERC721 {
      */
     function addRevoker(address revoker, uint256 add) external {
         uint256 weight = revokerWeight[msg.sender][revoker] + add;
-        revokerWeight[msg.sender][revoker] += weight;
+        revokerWeight[msg.sender][revoker] = weight;
         emit RevokerAssignment(msg.sender, revoker, weight);
     }
 
