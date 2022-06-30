@@ -5,6 +5,7 @@ pragma solidity 0.8.15;
 import "interfaces/Addresses.sol";
 import "interfaces/IERC20Permit.sol";
 import "interfaces/IERC721.sol";
+import "interfaces/Tokens.sol";
 
 /**
  * @title KimlikDAO TCKT contract.
