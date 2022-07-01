@@ -21,6 +21,7 @@ contract TCKTTest is Test {
     function setUp() public {
         vm.prank(TCKT_DEPLOYER);
         tckt = new TCKT();
+        assertEq(address(tckt), TCKT_ADDR);
     }
 
     function testTokenURI0() public {
@@ -169,5 +170,96 @@ contract TCKTTest is Test {
 
         vm.expectRevert();
         tckt.create{value: 0.04 ether}(1231231233);
+    }
+
+    bytes32 public constant PERMIT_TYPEHASH =
+        0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
+
+    /**
+     * Authorizes a payment from `vm.addr(0x1337ACC)` for the spender
+     * `TCKT_ADDR`.
+     */
+    function authorizePayment(
+        IERC20Permit token,
+        uint256 amount,
+        uint256 deadline,
+        uint256 nonce
+    )
+        internal
+        returns (
+            uint8,
+            bytes32,
+            bytes32
+        )
+    {
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                token.DOMAIN_SEPARATOR(),
+                keccak256(
+                    abi.encode(
+                        PERMIT_TYPEHASH,
+                        vm.addr(0x1337ACC),
+                        TCKT_ADDR,
+                        amount,
+                        nonce,
+                        deadline
+                    )
+                )
+            )
+        );
+        return vm.sign(0x1337ACC, digest);
+    }
+
+    function testUSDTPayment() public {
+        setUpTokens();
+
+        vm.prank(KIMLIKDAO_PRICE_FEEDER);
+        // Set TCKT price to 1.1 USDT
+        tckt.updatePrice(address(USDT), 2e6);
+
+        vm.prank(USDT_DEPLOYER);
+        USDT.transfer(vm.addr(0x1337ACC), 15e6);
+
+        {
+            uint256 deadline = block.timestamp + 1200;
+            (uint8 v, bytes32 r, bytes32 s) = authorizePayment(
+                USDT,
+                2e6,
+                deadline,
+                0
+            );
+
+            vm.prank(vm.addr(0x1337ACC));
+            tckt.createWithTokenPayment(USDT, 123123123, deadline, v, r, s);
+            assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
+        }
+        vm.prank(vm.addr(0x1337ACC));
+        tckt.revoke();
+        {
+            uint256 deadline = block.timestamp + 1200;
+            (uint8 v, bytes32 r, bytes32 s) = authorizePayment(
+                USDT,
+                2e6,
+                deadline,
+                1
+            );
+            vm.prank(vm.addr(0x1337ACC));
+            tckt.createWithTokenPayment(USDT, 123123123, deadline, v, r, s);
+        }
+        vm.prank(vm.addr(0x1337ACC));
+        tckt.revoke();
+        {
+            uint256 deadline = block.timestamp + 1200;
+            (uint8 v, bytes32 r, bytes32 s) = authorizePayment(
+                USDT,
+                1e6,
+                deadline,
+                2
+            );
+            vm.prank(vm.addr(0x1337ACC));
+            vm.expectRevert();
+            tckt.createWithTokenPayment(USDT, 123123123, deadline, v, r, s);
+        }
     }
 }
