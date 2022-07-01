@@ -6,17 +6,10 @@ import "contracts/TCKT.sol";
 import "forge-std/Test.sol";
 import "interfaces/Addresses.sol";
 import "interfaces/IERC20Permit.sol";
-import "interfaces/MockTokens.sol";
+import "interfaces/test/MockTokens.sol";
 
 contract TCKTTest is Test {
     TCKT private tckt;
-    IERC20Permit private usdt;
-
-    function setUpTokens() public {
-        vm.setNonce(USDT_DEPLOYER, USDT_DEPLOY_N);
-        vm.prank(USDT_DEPLOYER);
-        usdt = new MockERC20Permit("USDt", "TetherToken", 6);
-    }
 
     function setUp() public {
         vm.prank(TCKT_DEPLOYER);
@@ -212,10 +205,10 @@ contract TCKTTest is Test {
     }
 
     function testUSDTPayment() public {
-        setUpTokens();
+        DeployMockTokens();
 
         vm.prank(KIMLIKDAO_PRICE_FEEDER);
-        // Set TCKT price to 1.1 USDT
+        // Set TCKT price to 2 USDT
         tckt.updatePrice(address(USDT), 2e6);
 
         vm.prank(USDT_DEPLOYER);
@@ -261,5 +254,27 @@ contract TCKTTest is Test {
             vm.expectRevert();
             tckt.createWithTokenPayment(USDT, 123123123, deadline, v, r, s);
         }
+    }
+
+    function testUSDCPayment() public {
+        DeployMockTokens();
+
+        vm.prank(KIMLIKDAO_PRICE_FEEDER);
+        // Set TCKT price to 1.1 USDC
+        tckt.updatePrice(address(USDC), 1.1e6);
+        vm.prank(USDC_DEPLOYER);
+        USDC.transfer(vm.addr(0x1337ACC), 15e6);
+
+        uint256 deadline = block.timestamp + 1200;
+        (uint8 v, bytes32 r, bytes32 s) = authorizePayment(
+            USDC,
+            1.1e6,
+            deadline,
+            0
+        );
+
+        vm.prank(vm.addr(0x1337ACC));
+        tckt.createWithUSDCPayment(123123123, deadline, v, r, s);
+        assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
     }
 }
