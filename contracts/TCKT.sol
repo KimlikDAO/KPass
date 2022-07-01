@@ -225,7 +225,7 @@ contract TCKT is IERC721 {
      * date earlier than `exposureReported[humanID]` as invalid.
      */
     function reportExposure(bytes32 humanID) external {
-        require(msg.sender == THRESHOLD_2OF2_EXPOSURE_LIST_WRITER);
+        require(msg.sender == THRESHOLD_2OF2_EXPOSURE_REPORTER);
         exposureReported[humanID] = block.timestamp;
         emit ExposureReport(humanID, block.timestamp);
     }

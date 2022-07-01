@@ -116,6 +116,38 @@ contract TCKTTest is Test {
         assertEq(tckt.balanceOf(address(this)), 0);
     }
 
+    function testAuthenticationPriceFeeder() public {
+        vm.expectRevert();
+        tckt.updatePrice(vm.addr(1), 15);
+
+        vm.prank(KIMLIKDAO_PRICE_FEEDER);
+        tckt.updatePrice(vm.addr(1), 15);
+        assertEq(tckt.priceIn(vm.addr(1)), 15);
+
+        uint256[] memory prices = new uint256[](1);
+        prices[0] = (17 << 160) | 1337;
+
+        vm.expectRevert();
+        tckt.updatePricesBulk(prices);
+
+        vm.prank(KIMLIKDAO_PRICE_FEEDER);
+        tckt.updatePricesBulk(prices);
+        assertEq(tckt.priceIn(address(1337)), 17);
+    }
+
+    function testAuthenticationReportExposure() public {
+        vm.expectRevert();
+        tckt.reportExposure(bytes32(uint256(123123123)));
+
+        vm.prank(THRESHOLD_2OF2_EXPOSURE_REPORTER);
+        tckt.reportExposure(bytes32(uint256(123123123)));
+
+        assertEq(
+            tckt.exposureReported(bytes32(uint256(123123123))),
+            block.timestamp
+        );
+    }
+
     function testNativeTokenPayment() public {
         vm.prank(KIMLIKDAO_PRICE_FEEDER);
         tckt.updatePrice(address(0), 0.05 ether);
