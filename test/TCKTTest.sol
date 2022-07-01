@@ -4,9 +4,24 @@ pragma solidity 0.8.15;
 
 import "contracts/TCKT.sol";
 import "forge-std/Test.sol";
+import "interfaces/Addresses.sol";
+import "interfaces/IERC20Permit.sol";
+import "interfaces/MockTokens.sol";
 
 contract TCKTTest is Test {
-    TCKT tckt = new TCKT();
+    TCKT private tckt;
+    IERC20Permit private usdt;
+
+    function setUpTokens() public {
+        vm.setNonce(USDT_DEPLOYER, USDT_DEPLOY_N);
+        vm.prank(USDT_DEPLOYER);
+        usdt = new MockERC20Permit("USDt", "TetherToken", 6);
+    }
+
+    function setUp() public {
+        vm.prank(TCKT_DEPLOYER);
+        tckt = new TCKT();
+    }
 
     function testTokenURI0() public {
         assertEq(
@@ -99,5 +114,28 @@ contract TCKTTest is Test {
         vm.prank(vm.addr(12));
         tckt.revokeFriend(address(this));
         assertEq(tckt.balanceOf(address(this)), 0);
+    }
+
+    function testNativeTokenPayment() public {
+        vm.prank(KIMLIKDAO_PRICE_FEEDER);
+        tckt.updatePrice(address(0), 0.05 ether);
+
+        vm.expectRevert();
+        tckt.create(123123123);
+
+        vm.expectRevert();
+        tckt.create{value: 0.04 ether}(123123123);
+
+        vm.prank(KIMLIKDAO_PRICE_FEEDER);
+        tckt.updatePrice(address(0), 0.04 ether);
+
+        tckt.create{value: 0.04 ether}(1231231233);
+        tckt.create{value: 0.05 ether}(123123123);
+
+        vm.prank(KIMLIKDAO_PRICE_FEEDER);
+        tckt.updatePrice(address(0), 0.05 ether);
+
+        vm.expectRevert();
+        tckt.create{value: 0.04 ether}(1231231233);
     }
 }
