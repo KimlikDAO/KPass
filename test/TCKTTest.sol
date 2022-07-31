@@ -114,26 +114,26 @@ contract TCKTTest is Test {
         vm.expectRevert();
         tckt.updatePrice(vm.addr(1), 15);
 
-        vm.prank(KIMLIKDAO_PRICE_FEEDER);
+        vm.prank(TCKT_PRICE_FEEDER);
         tckt.updatePrice(vm.addr(1), 15);
-        assertEq(tckt.priceIn(vm.addr(1)), 15);
+        assertEq(tckt.getPrice(vm.addr(1), true), 15);
 
         uint256[] memory prices = new uint256[](1);
         prices[0] = (17 << 160) | 1337;
 
         vm.expectRevert();
-        tckt.updatePricesBulk(prices);
+        tckt.updatePricesBulk((1 << 128) + 1, prices);
 
-        vm.prank(KIMLIKDAO_PRICE_FEEDER);
-        tckt.updatePricesBulk(prices);
-        assertEq(tckt.priceIn(address(1337)), 17);
+        vm.prank(TCKT_PRICE_FEEDER);
+        tckt.updatePricesBulk((1 << 128) + 1, prices);
+        assertEq(tckt.getPrice(address(1337), true), 17);
     }
 
     function testAuthenticationReportExposure() public {
         vm.expectRevert();
         tckt.reportExposure(bytes32(uint256(123123123)));
 
-        vm.prank(THRESHOLD_2OF2_EXPOSURE_REPORTER);
+        vm.prank(TCKT_2OF2_EXPOSURE_REPORTER);
         tckt.reportExposure(bytes32(uint256(123123123)));
 
         assertEq(
@@ -142,8 +142,8 @@ contract TCKTTest is Test {
         );
     }
 
-    function testNativeTokenPayment() public {
-        vm.prank(KIMLIKDAO_PRICE_FEEDER);
+    function testCreate() public {
+        vm.prank(TCKT_PRICE_FEEDER);
         tckt.updatePrice(address(0), 0.05 ether);
 
         vm.expectRevert();
@@ -152,18 +152,22 @@ contract TCKTTest is Test {
         vm.expectRevert();
         tckt.create{value: 0.04 ether}(123123123);
 
-        vm.prank(KIMLIKDAO_PRICE_FEEDER);
+        vm.prank(TCKT_PRICE_FEEDER);
         tckt.updatePrice(address(0), 0.04 ether);
 
-        tckt.create{value: 0.04 ether}(1231231233);
-        tckt.create{value: 0.05 ether}(123123123);
+        tckt.create{value: 0.06 ether}(1231231233);
+        tckt.create{value: 0.07 ether}(123123123);
 
-        vm.prank(KIMLIKDAO_PRICE_FEEDER);
+        vm.prank(TCKT_PRICE_FEEDER);
         tckt.updatePrice(address(0), 0.05 ether);
 
         vm.expectRevert();
-        tckt.create{value: 0.04 ether}(1231231233);
+        tckt.create{value: 0.074 ether}(123123123);
+
+        tckt.create{value: 0.075 ether}(1231231233);
     }
+
+    function testUpdatePricesBulk() public {}
 
     bytes32 public constant PERMIT_TYPEHASH =
         0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
@@ -207,7 +211,7 @@ contract TCKTTest is Test {
     function testUSDTPayment() public {
         DeployMockTokens();
 
-        vm.prank(KIMLIKDAO_PRICE_FEEDER);
+        vm.prank(TCKT_PRICE_FEEDER);
         // Set TCKT price to 2 USDT
         tckt.updatePrice(address(USDT), 2e6);
 
@@ -218,11 +222,26 @@ contract TCKTTest is Test {
             uint256 deadline = block.timestamp + 1200;
             (uint8 v, bytes32 r, bytes32 s) = authorizePayment(
                 USDT,
-                2e6,
+                3e6,
                 deadline,
                 0
             );
 
+            vm.prank(vm.addr(0x1337ACC));
+            tckt.createWithTokenPayment(USDT, 123123123, deadline, v, r, s);
+            assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
+        }
+
+        vm.prank(vm.addr(0x1337ACC));
+        tckt.revoke();
+        {
+            uint256 deadline = block.timestamp + 1200;
+            (uint8 v, bytes32 r, bytes32 s) = authorizePayment(
+                USDT,
+                3e6,
+                deadline,
+                1
+            );
             vm.prank(vm.addr(0x1337ACC));
             tckt.createWithTokenPayment(USDT, 123123123, deadline, v, r, s);
             assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
@@ -233,20 +252,7 @@ contract TCKTTest is Test {
             uint256 deadline = block.timestamp + 1200;
             (uint8 v, bytes32 r, bytes32 s) = authorizePayment(
                 USDT,
-                2e6,
-                deadline,
-                1
-            );
-            vm.prank(vm.addr(0x1337ACC));
-            tckt.createWithTokenPayment(USDT, 123123123, deadline, v, r, s);
-        }
-        vm.prank(vm.addr(0x1337ACC));
-        tckt.revoke();
-        {
-            uint256 deadline = block.timestamp + 1200;
-            (uint8 v, bytes32 r, bytes32 s) = authorizePayment(
-                USDT,
-                1e6,
+                2.999999e6,
                 deadline,
                 2
             );
@@ -259,8 +265,9 @@ contract TCKTTest is Test {
     function testUSDCPayment() public {
         DeployMockTokens();
 
-        vm.prank(KIMLIKDAO_PRICE_FEEDER);
-        // Set TCKT price to 1.1 USDC
+        vm.prank(TCKT_PRICE_FEEDER);
+        // Set TCKT price to 1.1 USDC, which makes the
+        // revokerless premium price 1.65.
         tckt.updatePrice(address(USDC), 1.1e6);
         vm.prank(USDC_DEPLOYER);
         USDC.transfer(vm.addr(0x1337ACC), 15e6);
@@ -268,13 +275,14 @@ contract TCKTTest is Test {
         uint256 deadline = block.timestamp + 1200;
         (uint8 v, bytes32 r, bytes32 s) = authorizePayment(
             USDC,
-            1.1e6,
+            1.65e6,
             deadline,
             0
         );
 
+        uint256 ss = (uint256(v - 27) << 255) | uint256(s);
         vm.prank(vm.addr(0x1337ACC));
-        tckt.createWithUSDCPayment(123123123, deadline, v, r, s);
+        tckt.createWithUSDCPayment(123123123, deadline, r, ss);
         assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
     }
 }

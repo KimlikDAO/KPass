@@ -11,8 +11,6 @@ import "interfaces/Tokens.sol";
  * @title KimlikDAO TCKT contract.
  */
 contract TCKT is IERC721 {
-    address private constant NATIVE_TOKEN = address(0);
-
     event RevokerAssignment(
         address indexed owner,
         address indexed revoker,
@@ -29,14 +27,12 @@ contract TCKT is IERC721 {
     mapping(address => mapping(address => uint256)) public revokerWeight;
     mapping(address => uint256) public revokesRemaining;
 
-    /// @notice The price of a TCKT in a given IERC20Permit token.
-    /// The price of a TCKT in the networks native token is represented by
-    /// `priceIn[address(0)]`.
-    mapping(address => uint256) public priceIn;
-
-    // Maps a HumanID("KimlikDAO:TCKT:exposure") to a reported exposure
-    // timestamp.
+    /// Maps a HumanID("KimlikDAO:TCKT:exposure") to a reported exposure
+    /// timestamp, or zero if no exposure has been reported.
     mapping(bytes32 => uint256) public exposureReported;
+
+    mapping(address => uint256) private priceIn;
+    uint256 private revokerlessPremium = (3 << 128) | uint256(2);
 
     function name() external pure override returns (string memory) {
         return "TC Kimlik Tokeni";
@@ -47,7 +43,11 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice Each wallet can hold at most one TCKT at any moment.
+     * @notice Returns the number of TCKTs in a given account, which is 0 or 1.
+     *
+     * Each wallet can hold at most one TCKT, however a new TCKT can be minted
+     * to the same address at any time replacing the previous one, say after
+     * a personal information change occurs.
      */
     function balanceOf(address addr) external view override returns (uint256) {
         return handles[addr] == 0 ? 0 : 1;
@@ -70,7 +70,8 @@ contract TCKT is IERC721 {
                 "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
             );
             uint256 magic = 0x4e5a461f976ce5b9229582822e96e6269e5d6f18a5960a04480c6825748ba04;
-            bytes memory out = "ipfs://Qm____________________________________________";
+            bytes
+                memory out = "ipfs://Qm____________________________________________";
             out[52] = toChar[id % 58];
             id /= 58;
             for (uint256 p = 51; p > 9; --p) {
@@ -85,8 +86,9 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice Here we lie about the interfaces we support so that wallets
-     * recognize TCKT as an NFT.
+     * @notice Here we claim to support the full ERC721 interface so that
+     * wallets recognize TCKT as an NFT, even though TCKTs transfer methods are
+     * disabled.
      */
     function supportsInterface(bytes4 interfaceId)
         public
@@ -100,28 +102,41 @@ contract TCKT is IERC721 {
             interfaceId == 0x5b5e139f; // ERC165 interface ID for ERC721Metadata.
     }
 
-    /**
-     * @notice To minimize gas fees for TCKT buyers to the maximum extent, we
-     * do not forward fees collected in the networks native token to
-     * `DAO_KASASI` in each TCKT creation.
-     *
-     * Instead, the following method gives anyone the right to transfer the
-     * entire balance of this contract to `DAO_KASASI` at any time.
-     *
-     * Further, KimlikDAO does daily sweeps, again using this method and
-     * covering the gas fee.
-     */
-    function sweepNativeToken() external {
-        DAO_KASASI.transfer(address(this).balance);
+    /// @notice The price of a TCKT in a given IERC20Permit token.
+    /// The price of a TCKT in the networks native token is represented by
+    /// `priceIn[0]`.
+    function getPrice(address token, bool withRevokers)
+        external
+        view
+        returns (uint256)
+    {
+        uint256 price = priceIn[token];
+        return withRevokers ? uint128(price) : price >> 128;
     }
 
     /**
      * @notice Creates a new TCKT and collects the fee in the native token.
      */
     function create(uint256 handle) public payable {
-        require(msg.value >= priceIn[NATIVE_TOKEN]);
+        require(msg.value >= (priceIn[address(0)] >> 128));
         handles[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
+    }
+
+    /**
+     * @notice To minimize gas fees for TCKT buyers to the maximum extent, we
+     * do not forward fees collected in the networks native token to
+     * `DAO_KASASI` in each TCKT creation.
+     *
+     * Instead, the following method gives anyone the right to transfer the
+     * entire native token balance of this contract to `DAO_KASASI` at any
+     * time.
+     *
+     * Further, KimlikDAO does daily sweeps, again using this method and
+     * covering the gas fee.
+     */
+    function sweepNativeToken() external {
+        DAO_KASASI.transfer(address(this).balance);
     }
 
     /**
@@ -140,7 +155,8 @@ contract TCKT is IERC721 {
         uint256 revokeThreshold,
         uint256[] calldata revokers
     ) external payable {
-        require(msg.value >= priceIn[NATIVE_TOKEN]);
+        require(msg.value >= uint128(priceIn[address(0)]));
+        require(revokers.length > 0);
         handles[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
         revokesRemaining[msg.sender] = revokeThreshold;
@@ -173,7 +189,7 @@ contract TCKT is IERC721 {
      * @param deadline         The timestamp until which the payment
      *                         authorization is valid for.
      * @param v                recovery identifier of the signature.
-     * @param r                random curve point of the signature.
+     * @param r                random curve point x coordinate.
      * @param s                mapped curve point of the signature.
      */
     function createWithTokenPayment(
@@ -184,7 +200,7 @@ contract TCKT is IERC721 {
         bytes32 r,
         bytes32 s
     ) external {
-        uint256 price = priceIn[address(token)];
+        uint256 price = priceIn[address(token)] >> 128;
         require(price > 0);
         token.permit(msg.sender, address(this), price, deadline, v, r, s);
         token.transferFrom(msg.sender, DAO_KASASI, price);
@@ -201,12 +217,19 @@ contract TCKT is IERC721 {
     function createWithUSDCPayment(
         uint256 handle,
         uint256 deadline,
-        uint8 v,
         bytes32 r,
-        bytes32 s
+        uint256 ss
     ) external {
-        uint256 price = priceIn[address(USDC)];
-        USDC.permit(msg.sender, address(this), price, deadline, v, r, s);
+        uint256 price = priceIn[address(USDC)] >> 128;
+        USDC.permit(
+            msg.sender,
+            address(this),
+            price,
+            deadline,
+            uint8(ss >> 255) + 27,
+            r,
+            bytes32(ss & ((1 << 255) - 1))
+        );
         USDC.transferFrom(msg.sender, DAO_KASASI, price);
         handles[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
@@ -225,7 +248,7 @@ contract TCKT is IERC721 {
      * date earlier than `exposureReported[humanID]` as invalid.
      */
     function reportExposure(bytes32 humanID) external {
-        require(msg.sender == THRESHOLD_2OF2_EXPOSURE_REPORTER);
+        require(msg.sender == TCKT_2OF2_EXPOSURE_REPORTER);
         exposureReported[humanID] = block.timestamp;
         emit ExposureReport(humanID, block.timestamp);
     }
@@ -287,19 +310,28 @@ contract TCKT is IERC721 {
     /**
      * @notice Updates TCKT prices in a given list of tokens.
      *
+     * @param premium          The multiplicative price premium for getting a
+     *                         TCKT without specifying a social revokers list.
+     *                         The 256-bit value is understood as 128-bit
+     *                         numerator followed by 128-bit denominator.
      * @param prices           A list of tuples (price, address) where the
      *                         price is an uint96 and the address is 20 bytes.
      *                         Note if the price for a token does not fit in 96
      *                         bits, the `updatePrice()` method should be used
      *                         instead.
      */
-    function updatePricesBulk(uint256[] calldata prices) external {
-        require(msg.sender == KIMLIKDAO_PRICE_FEEDER);
+    function updatePricesBulk(uint256 premium, uint256[] calldata prices)
+        external
+    {
+        require(msg.sender == TCKT_PRICE_FEEDER);
         unchecked {
+            revokerlessPremium = premium;
             for (uint256 i = 0; i < prices.length; ++i) {
                 address token = address(uint160(prices[i]));
-                priceIn[token] = prices[i] >> 160;
-                emit PriceChange(token, prices[i] >> 160);
+                uint256 price = prices[i] >> 160;
+                uint256 packed = (price * premium) / uint128(premium);
+                priceIn[token] = (packed & (type(uint256).max << 128)) | price;
+                emit PriceChange(token, price);
             }
         }
     }
@@ -313,9 +345,13 @@ contract TCKT is IERC721 {
      * @param price            Price of TCKT denominated in given token.
      */
     function updatePrice(address token, uint256 price) external {
-        require(msg.sender == KIMLIKDAO_PRICE_FEEDER);
-        priceIn[token] = price;
-        emit PriceChange(token, price);
+        require(msg.sender == TCKT_PRICE_FEEDER);
+        unchecked {
+            uint256 premium = revokerlessPremium;
+            uint256 packed = (price * premium) / uint128(premium);
+            priceIn[token] = (packed & (type(uint256).max << 128)) | price;
+            emit PriceChange(token, price);
+        }
     }
 
     /**
