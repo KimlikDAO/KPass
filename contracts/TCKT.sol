@@ -9,6 +9,7 @@ import "interfaces/Tokens.sol";
 
 /**
  * @title KimlikDAO TCKT contract.
+ * @author KimlikDAO
  */
 contract TCKT is IERC721 {
     event RevokerAssignment(
@@ -31,7 +32,7 @@ contract TCKT is IERC721 {
     /// timestamp, or zero if no exposure has been reported.
     mapping(bytes32 => uint256) public exposureReported;
 
-    mapping(address => uint256) private priceIn;
+    mapping(address => uint256) public priceIn;
     uint256 private revokerlessPremium = (3 << 128) | uint256(2);
 
     function name() external pure override returns (string memory) {
@@ -102,18 +103,6 @@ contract TCKT is IERC721 {
             interfaceId == 0x5b5e139f; // ERC165 interface ID for ERC721Metadata.
     }
 
-    /// @notice The price of a TCKT in a given IERC20Permit token.
-    /// The price of a TCKT in the networks native token is represented by
-    /// `priceIn[0]`.
-    function getPrice(address token, bool withRevokers)
-        external
-        view
-        returns (uint256)
-    {
-        uint256 price = priceIn[token];
-        return withRevokers ? uint128(price) : price >> 128;
-    }
-
     /**
      * @notice Creates a new TCKT and collects the fee in the native token.
      */
@@ -144,30 +133,19 @@ contract TCKT is IERC721 {
      * the fee in the native token.
      *
      * @param handle           IPFS handle of the persisted TCKT.
-     * @param revokeThreshold  The total revoke weight needed before this TCKT
-     *                         is destroyed.
      * @param revokers         A list of pairs (weight, address), bit packed
      *                         into a single word, where the weight is a uint96
      *                         and the address is 20 bytes.
      */
-    function createWithRevokers(
-        uint256 handle,
-        uint256 revokeThreshold,
-        uint256[] calldata revokers
-    ) external payable {
+    function createWithRevokers(uint256 handle, uint256[5] calldata revokers)
+        external
+        payable
+    {
         require(msg.value >= uint128(priceIn[address(0)]));
         require(revokers.length > 0);
         handles[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
-        revokesRemaining[msg.sender] = revokeThreshold;
-
-        unchecked {
-            for (uint256 i = 0; i < revokers.length; ++i) {
-                address revoker = address(uint160(revokers[i]));
-                revokerWeight[msg.sender][revoker] = revokers[i] >> 160;
-                emit RevokerAssignment(msg.sender, revoker, revokers[i] >> 160);
-            }
-        }
+        setRevokers(revokers);
     }
 
     // TODO(KimlikDAO-bot) We need IERC20Permit support from BiLira to be able
@@ -184,55 +162,72 @@ contract TCKT is IERC721 {
      * signature will be invalid. However, the price changes happen at most
      * once a week and off peak hours by an autonomous vote of TCKO holders.
      *
-     * @param token            Contract address of a IERC20Permit token.
      * @param handle           IPFS handle of the persisted TCKT.
-     * @param deadline         The timestamp until which the payment
+     * @param deadlineAndToken Contract address of a IERC20Permit token and
+     *                         the timestamp until which the payment
      *                         authorization is valid for.
-     * @param v                recovery identifier of the signature.
      * @param r                random curve point x coordinate.
-     * @param s                mapped curve point of the signature.
+     * @param ss               mapped curve point of the signature.
      */
     function createWithTokenPayment(
-        IERC20Permit token,
         uint256 handle,
-        uint256 deadline,
-        uint8 v,
+        uint256 deadlineAndToken,
         bytes32 r,
-        bytes32 s
+        uint256 ss
     ) external {
-        uint256 price = priceIn[address(token)] >> 128;
+        address token = address(uint160(deadlineAndToken));
+        uint256 price = priceIn[token] >> 128;
         require(price > 0);
-        token.permit(msg.sender, address(this), price, deadline, v, r, s);
-        token.transferFrom(msg.sender, DAO_KASASI, price);
+        unchecked {
+            IERC20Permit(token).permit(
+                msg.sender,
+                address(this),
+                price,
+                deadlineAndToken >> 160,
+                uint8(ss >> 255) + 27,
+                r,
+                bytes32(ss & ((1 << 255) - 1))
+            );
+        }
+        IERC20(token).transferFrom(msg.sender, DAO_KASASI, price);
         handles[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
     }
 
     /**
-     * @notice Specialization of `createWithTokenPayment()` to USDC.
-     *
-     * Provides modest gas savings over calling `createWithTokenPayment()`
-     * with USDC contract address.
+     * @param handle           IPFS handle of the persisted TCKT.
+     * @param revokers         A list of pairs (weight, address), bit packed
+     *                         into a single word, where the weight is a uint96
+     *                         and the address is 20 bytes.
+     * @param deadlineAndToken Contract address of a IERC20Permit token.
+     * @param r                random curve point x coordinate.
+     * @param ss               mapped curve point of the signature.
      */
-    function createWithUSDCPayment(
+    function createWithRevokersWithTokenPayment(
         uint256 handle,
-        uint256 deadline,
+        uint256[5] calldata revokers,
+        uint256 deadlineAndToken,
         bytes32 r,
         uint256 ss
     ) external {
-        uint256 price = priceIn[address(USDC)] >> 128;
-        USDC.permit(
-            msg.sender,
-            address(this),
-            price,
-            deadline,
-            uint8(ss >> 255) + 27,
-            r,
-            bytes32(ss & ((1 << 255) - 1))
-        );
-        USDC.transferFrom(msg.sender, DAO_KASASI, price);
+        address token = address(uint160(deadlineAndToken));
+        uint256 price = uint128(priceIn[token]);
+        require(price > 0);
+        unchecked {
+            IERC20Permit(token).permit(
+                msg.sender,
+                address(this),
+                price,
+                deadlineAndToken >> 160,
+                uint8(ss >> 255) + 27,
+                r,
+                bytes32(ss & ((1 << 255) - 1))
+            );
+        }
+        IERC20(token).transferFrom(msg.sender, DAO_KASASI, price);
         handles[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
+        setRevokers(revokers);
     }
 
     /**
@@ -329,8 +324,8 @@ contract TCKT is IERC721 {
             for (uint256 i = 0; i < prices.length; ++i) {
                 address token = address(uint160(prices[i]));
                 uint256 price = prices[i] >> 160;
-                uint256 packed = (price * premium) / uint128(premium);
-                priceIn[token] = (packed & (type(uint256).max << 128)) | price;
+                uint256 t = (price * premium) / uint128(premium);
+                priceIn[token] = (t & (type(uint256).max << 128)) | price;
                 emit PriceChange(token, price);
             }
         }
@@ -348,8 +343,8 @@ contract TCKT is IERC721 {
         require(msg.sender == TCKT_PRICE_FEEDER);
         unchecked {
             uint256 premium = revokerlessPremium;
-            uint256 packed = (price * premium) / uint128(premium);
-            priceIn[token] = (packed & (type(uint256).max << 128)) | price;
+            uint256 t = (price * premium) / uint128(premium);
+            priceIn[token] = (t & (type(uint256).max << 128)) | price;
             emit PriceChange(token, price);
         }
     }
@@ -362,5 +357,37 @@ contract TCKT is IERC721 {
         // an unkown contract, which could potentially be a security risk.
         require(msg.sender == DEV_KASASI);
         token.transfer(DAO_KASASI, token.balanceOf(address(this)));
+    }
+
+    function setRevokers(uint256[5] calldata revokers) internal {
+        revokesRemaining[msg.sender] = revokers[0] >> 192;
+
+        address rev0Addr = address(uint160(revokers[0]));
+        uint256 rev0Weight = (revokers[0] >> 160) & type(uint32).max;
+        require(rev0Addr != address(0) && rev0Addr != msg.sender);
+        revokerWeight[msg.sender][rev0Addr] = rev0Weight;
+        emit RevokerAssignment(msg.sender, rev0Addr, rev0Weight);
+
+        address rev1Addr = address(uint160(revokers[1]));
+        require(rev1Addr != address(0) && rev1Addr != msg.sender);
+        require(rev1Addr != rev0Addr);
+        revokerWeight[msg.sender][rev1Addr] = revokers[1] >> 160;
+        emit RevokerAssignment(msg.sender, rev1Addr, revokers[1] >> 160);
+
+        address rev2Addr = address(uint160(revokers[2]));
+        require(rev2Addr != address(0) && rev2Addr != msg.sender);
+        require(rev2Addr != rev1Addr && rev2Addr != rev0Addr);
+        revokerWeight[msg.sender][rev2Addr] = revokers[2] >> 160;
+        emit RevokerAssignment(msg.sender, rev2Addr, revokers[2] >> 160);
+
+        address rev3Addr = address(uint160(revokers[3]));
+        if (rev3Addr == address(0)) return;
+        revokerWeight[msg.sender][rev3Addr] = revokers[3] >> 160;
+        emit RevokerAssignment(msg.sender, rev3Addr, revokers[3] >> 160);
+
+        address rev4Addr = address(uint160(revokers[4]));
+        if (rev4Addr == address(0)) return;
+        revokerWeight[msg.sender][rev4Addr] = revokers[4] >> 160;
+        emit RevokerAssignment(msg.sender, rev4Addr, revokers[4] >> 160);
     }
 }

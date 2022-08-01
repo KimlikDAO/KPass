@@ -32,13 +32,6 @@ contract TCKTTest is Test {
         );
     }
 
-    function testTokenURIGas() public view returns (string memory) {
-        return
-            tckt.tokenURI(
-                0xd2abff978646ac494f499e9ecd6873414a0c6105196c8c2580d52769f3fc0523
-            );
-    }
-
     function testRevoke() public {
         assertEq(tckt.balanceOf(address(this)), 0);
         tckt.create(123123123);
@@ -48,13 +41,18 @@ contract TCKTTest is Test {
     }
 
     function testSocialRevoke() public {
-        uint256[] memory revokers = new uint256[](5);
-        revokers[0] = (uint256(1) << 160) | uint160(vm.addr(10));
-        revokers[1] = (uint256(1) << 160) | uint160(vm.addr(11));
-        revokers[2] = (uint256(1) << 160) | uint160(vm.addr(12));
-        revokers[3] = (uint256(1) << 160) | uint160(vm.addr(13));
-        revokers[4] = (uint256(1) << 160) | uint160(vm.addr(14));
-        tckt.createWithRevokers(123123123, 4, revokers);
+        tckt.createWithRevokers(
+            123123123,
+            [
+                (uint256(4) << 192) |
+                    (uint256(1) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(1) << 160) | uint160(vm.addr(11)),
+                (uint256(1) << 160) | uint160(vm.addr(12)),
+                (uint256(1) << 160) | uint160(vm.addr(13)),
+                (uint256(1) << 160) | uint160(vm.addr(14))
+            ]
+        );
 
         assertEq(tckt.balanceOf(address(this)), 1);
 
@@ -76,13 +74,14 @@ contract TCKTTest is Test {
     }
 
     function testReduceRevokeThreshold() public {
-        uint256[] memory revokers = new uint256[](5);
-        revokers[0] = (uint256(1) << 160) | uint160(vm.addr(10));
-        revokers[1] = (uint256(1) << 160) | uint160(vm.addr(11));
-        revokers[2] = (uint256(1) << 160) | uint160(vm.addr(12));
-        revokers[3] = (uint256(1) << 160) | uint160(vm.addr(13));
-        revokers[4] = (uint256(1) << 160) | uint160(vm.addr(14));
-        tckt.createWithRevokers(123123123, 1, revokers);
+        uint256[5] memory revokers = [
+            (uint256(1) << 192) | (uint256(1) << 160) | uint160(vm.addr(10)),
+            (uint256(1) << 160) | uint160(vm.addr(11)),
+            (uint256(1) << 160) | uint160(vm.addr(12)),
+            (uint256(1) << 160) | uint160(vm.addr(13)),
+            (uint256(1) << 160) | uint160(vm.addr(14))
+        ];
+        tckt.createWithRevokers(123123123, revokers);
 
         assertEq(tckt.balanceOf(address(this)), 1);
         tckt.reduceRevokeThreshold(1);
@@ -93,9 +92,14 @@ contract TCKTTest is Test {
     }
 
     function testAddRevoker() public {
-        uint256[] memory revokers = new uint256[](5);
-        revokers[0] = (uint256(1) << 160) | uint160(vm.addr(10));
-        tckt.createWithRevokers(123123123, 4, revokers);
+        uint256[5] memory revokers = [
+            (uint256(4) << 192) | (uint256(1) << 160) | uint160(vm.addr(20)),
+            (uint256(1) << 160) | uint160(vm.addr(21)),
+            (uint256(1) << 160) | uint160(vm.addr(12)),
+            0,
+            0
+        ];
+        tckt.createWithRevokers(123123123, revokers);
 
         assertEq(tckt.balanceOf(address(this)), 1);
         tckt.addRevoker(vm.addr(11), 3);
@@ -116,7 +120,7 @@ contract TCKTTest is Test {
 
         vm.prank(TCKT_PRICE_FEEDER);
         tckt.updatePrice(vm.addr(1), 15);
-        assertEq(tckt.getPrice(vm.addr(1), true), 15);
+        assertEq(uint128(tckt.priceIn(vm.addr(1))), 15);
 
         uint256[] memory prices = new uint256[](1);
         prices[0] = (17 << 160) | 1337;
@@ -126,7 +130,7 @@ contract TCKTTest is Test {
 
         vm.prank(TCKT_PRICE_FEEDER);
         tckt.updatePricesBulk((1 << 128) + 1, prices);
-        assertEq(tckt.getPrice(address(1337), true), 17);
+        assertEq(uint128(tckt.priceIn(address(1337))), 17);
     }
 
     function testAuthenticationReportExposure() public {
@@ -166,8 +170,6 @@ contract TCKTTest is Test {
 
         tckt.create{value: 0.075 ether}(1231231233);
     }
-
-    function testUpdatePricesBulk() public {}
 
     bytes32 public constant PERMIT_TYPEHASH =
         0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
@@ -228,7 +230,10 @@ contract TCKTTest is Test {
             );
 
             vm.prank(vm.addr(0x1337ACC));
-            tckt.createWithTokenPayment(USDT, 123123123, deadline, v, r, s);
+            uint256 deadlineAndToken = (deadline << 160) |
+                uint160(address(USDT));
+            uint256 ss = (uint256(v - 27) << 255) | uint256(s);
+            tckt.createWithTokenPayment(123123123, deadlineAndToken, r, ss);
             assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
         }
 
@@ -242,8 +247,11 @@ contract TCKTTest is Test {
                 deadline,
                 1
             );
+            uint256 ss = (uint256(v - 27) << 255) | uint256(s);
+            uint256 deadlineAndToken = (deadline << 160) |
+                uint160(address(USDT));
             vm.prank(vm.addr(0x1337ACC));
-            tckt.createWithTokenPayment(USDT, 123123123, deadline, v, r, s);
+            tckt.createWithTokenPayment(123123123, deadlineAndToken, r, ss);
             assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
         }
         vm.prank(vm.addr(0x1337ACC));
@@ -256,33 +264,12 @@ contract TCKTTest is Test {
                 deadline,
                 2
             );
+            uint256 ss = (uint256(v - 27) << 255) | uint256(s);
+            uint256 deadlineAndToken = (deadline << 160) |
+                uint160(address(USDT));
             vm.prank(vm.addr(0x1337ACC));
             vm.expectRevert();
-            tckt.createWithTokenPayment(USDT, 123123123, deadline, v, r, s);
+            tckt.createWithTokenPayment(123123123, deadlineAndToken, r, ss);
         }
-    }
-
-    function testUSDCPayment() public {
-        DeployMockTokens();
-
-        vm.prank(TCKT_PRICE_FEEDER);
-        // Set TCKT price to 1.1 USDC, which makes the
-        // revokerless premium price 1.65.
-        tckt.updatePrice(address(USDC), 1.1e6);
-        vm.prank(USDC_DEPLOYER);
-        USDC.transfer(vm.addr(0x1337ACC), 15e6);
-
-        uint256 deadline = block.timestamp + 1200;
-        (uint8 v, bytes32 r, bytes32 s) = authorizePayment(
-            USDC,
-            1.65e6,
-            deadline,
-            0
-        );
-
-        uint256 ss = (uint256(v - 27) << 255) | uint256(s);
-        vm.prank(vm.addr(0x1337ACC));
-        tckt.createWithUSDCPayment(123123123, deadline, r, ss);
-        assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
     }
 }
