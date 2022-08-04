@@ -233,7 +233,7 @@ contract TCKTTest is Test {
             uint256 deadlineAndToken = (deadline << 160) |
                 uint160(address(USDT));
             uint256 ss = (uint256(v - 27) << 255) | uint256(s);
-            tckt.createWithTokenPayment(123123123, deadlineAndToken, r, ss);
+            tckt.createWithTokenPermit(123123123, deadlineAndToken, r, ss);
             assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
         }
 
@@ -251,7 +251,7 @@ contract TCKTTest is Test {
             uint256 deadlineAndToken = (deadline << 160) |
                 uint160(address(USDT));
             vm.prank(vm.addr(0x1337ACC));
-            tckt.createWithTokenPayment(123123123, deadlineAndToken, r, ss);
+            tckt.createWithTokenPermit(123123123, deadlineAndToken, r, ss);
             assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
         }
         vm.prank(vm.addr(0x1337ACC));
@@ -269,7 +269,7 @@ contract TCKTTest is Test {
                 uint160(address(USDT));
             vm.prank(vm.addr(0x1337ACC));
             vm.expectRevert();
-            tckt.createWithTokenPayment(123123123, deadlineAndToken, r, ss);
+            tckt.createWithTokenPermit(123123123, deadlineAndToken, r, ss);
         }
     }
 }

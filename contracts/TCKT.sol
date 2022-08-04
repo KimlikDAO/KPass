@@ -92,7 +92,7 @@ contract TCKT is IERC721 {
      * disabled.
      */
     function supportsInterface(bytes4 interfaceId)
-        public
+        external
         pure
         override
         returns (bool)
@@ -106,7 +106,7 @@ contract TCKT is IERC721 {
     /**
      * @notice Creates a new TCKT and collects the fee in the native token.
      */
-    function create(uint256 handle) public payable {
+    function create(uint256 handle) external payable {
         require(msg.value >= (priceIn[address(0)] >> 128));
         handles[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
@@ -152,6 +152,18 @@ contract TCKT is IERC721 {
     //                     to accept TRYB.
 
     /**
+     * @param handle           IPFS handle of the persisted TCKT.
+     * @param token            Contract address of a IERC20 token.
+     */
+    function createWithTokenPayment(uint256 handle, IERC20 token) external {
+        uint256 price = priceIn[address(token)] >> 128;
+        require(price > 0);
+        token.transferFrom(msg.sender, DAO_KASASI, price);
+        handles[msg.sender] = handle;
+        emit Transfer(address(this), msg.sender, handle);
+    }
+
+    /**
      * @notice Creates a TCKT and collects the fee in the provided `token`.
      *
      * The provided token has to be IERC20Permit, in particular, it needs to
@@ -169,17 +181,17 @@ contract TCKT is IERC721 {
      * @param r                random curve point x coordinate.
      * @param ss               mapped curve point of the signature.
      */
-    function createWithTokenPayment(
+    function createWithTokenPermit(
         uint256 handle,
         uint256 deadlineAndToken,
         bytes32 r,
         uint256 ss
     ) external {
-        address token = address(uint160(deadlineAndToken));
-        uint256 price = priceIn[token] >> 128;
+        IERC20Permit token = IERC20Permit(address(uint160(deadlineAndToken)));
+        uint256 price = priceIn[address(token)] >> 128;
         require(price > 0);
         unchecked {
-            IERC20Permit(token).permit(
+            token.permit(
                 msg.sender,
                 address(this),
                 price,
@@ -189,9 +201,29 @@ contract TCKT is IERC721 {
                 bytes32(ss & ((1 << 255) - 1))
             );
         }
-        IERC20(token).transferFrom(msg.sender, DAO_KASASI, price);
+        token.transferFrom(msg.sender, DAO_KASASI, price);
         handles[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
+    }
+
+    /**
+     * @param handle           IPFS handle of the persisted TCKT.
+     * @param revokers         A list of pairs (weight, address), bit packed
+     *                         into a single word, where the weight is a uint96
+     *                         and the address is 20 bytes.
+     * @param token            Contract address of a IERC20Permit token.
+     */
+    function createWithRevokersWithTokenPayment(
+        uint256 handle,
+        uint256[5] calldata revokers,
+        IERC20 token
+    ) external {
+        uint256 price = uint128(priceIn[address(token)]);
+        require(price > 0);
+        token.transferFrom(msg.sender, DAO_KASASI, price);
+        handles[msg.sender] = handle;
+        emit Transfer(address(this), msg.sender, handle);
+        setRevokers(revokers);
     }
 
     /**
@@ -203,18 +235,18 @@ contract TCKT is IERC721 {
      * @param r                random curve point x coordinate.
      * @param ss               mapped curve point of the signature.
      */
-    function createWithRevokersWithTokenPayment(
+    function createWithRevokersWithTokenPermit(
         uint256 handle,
         uint256[5] calldata revokers,
         uint256 deadlineAndToken,
         bytes32 r,
         uint256 ss
     ) external {
-        address token = address(uint160(deadlineAndToken));
-        uint256 price = uint128(priceIn[token]);
+        IERC20Permit token = IERC20Permit(address(uint160(deadlineAndToken)));
+        uint256 price = uint128(priceIn[address(token)]);
         require(price > 0);
         unchecked {
-            IERC20Permit(token).permit(
+            token.permit(
                 msg.sender,
                 address(this),
                 price,
@@ -224,7 +256,7 @@ contract TCKT is IERC721 {
                 bytes32(ss & ((1 << 255) - 1))
             );
         }
-        IERC20(token).transferFrom(msg.sender, DAO_KASASI, price);
+        token.transferFrom(msg.sender, DAO_KASASI, price);
         handles[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
         setRevokers(revokers);
@@ -298,6 +330,11 @@ contract TCKT is IERC721 {
         emit RevokerAssignment(msg.sender, revoker, weight);
     }
 
+    /**
+     * @notice Reduce revoker threshold by given amount.
+     *
+     * @param reduce           The amount to reduce.
+     */
     function reduceRevokeThreshold(uint256 reduce) external {
         revokesRemaining[msg.sender] -= reduce;
     }
@@ -349,16 +386,6 @@ contract TCKT is IERC721 {
         }
     }
 
-    /**
-     * Move ERC20 tokens sent to this address by accident to `DAO_KASASI`.
-     */
-    function rescueToken(IERC20 token) external {
-        // We restrict this method to `DEV_KASASI` only, as we call a method of
-        // an unkown contract, which could potentially be a security risk.
-        require(msg.sender == DEV_KASASI);
-        token.transfer(DAO_KASASI, token.balanceOf(address(this)));
-    }
-
     function setRevokers(uint256[5] calldata revokers) internal {
         revokesRemaining[msg.sender] = revokers[0] >> 192;
 
@@ -389,5 +416,15 @@ contract TCKT is IERC721 {
         if (rev4Addr == address(0)) return;
         revokerWeight[msg.sender][rev4Addr] = revokers[4] >> 160;
         emit RevokerAssignment(msg.sender, rev4Addr, revokers[4] >> 160);
+    }
+
+    /**
+     * Move ERC20 tokens sent to this address by accident to `DAO_KASASI`.
+     */
+    function rescueToken(IERC20 token) external {
+        // We restrict this method to `DEV_KASASI` only, as we call a method of
+        // an unkown contract, which could potentially be a security risk.
+        require(msg.sender == DEV_KASASI);
+        token.transfer(DAO_KASASI, token.balanceOf(address(this)));
     }
 }
