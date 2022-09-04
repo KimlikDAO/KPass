@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.15;
+pragma solidity 0.8.16;
 
 import "contracts/TCKT.sol";
 import "forge-std/Test.sol";
 import "interfaces/Addresses.sol";
 import "interfaces/IERC20Permit.sol";
 import "interfaces/test/MockTokens.sol";
+import "interfaces/Tokens.sol";
 
 contract TCKTTest is Test {
     TCKT private tckt;
@@ -102,8 +103,8 @@ contract TCKTTest is Test {
         tckt.createWithRevokers(123123123, revokers);
 
         assertEq(tckt.balanceOf(address(this)), 1);
-        tckt.addRevoker(vm.addr(11), 3);
-        tckt.addRevoker(vm.addr(12), 1);
+        tckt.addRevoker(uint256(3) << 160 | uint160(vm.addr(11)));
+        tckt.addRevoker(uint256(1) << 160 | uint160(vm.addr(12)));
 
         vm.prank(vm.addr(11));
         tckt.revokeFriend(address(this));

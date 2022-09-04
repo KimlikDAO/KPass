@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.15;
+pragma solidity 0.8.16;
 
 import "interfaces/Addresses.sol";
 import "interfaces/IERC20Permit.sol";
 import "interfaces/IERC721.sol";
-import "interfaces/Tokens.sol";
 
 /**
  * @title KimlikDAO TCKT contract.
@@ -24,7 +23,7 @@ contract TCKT is IERC721 {
     event ExposureReport(bytes32 indexed humanID, uint256 timestamp);
     event PriceChange(address indexed token, uint256 price);
 
-    mapping(address => uint256) public handles;
+    mapping(uint256 => uint256) public handleOf;
     mapping(address => mapping(address => uint256)) public revokerWeight;
     mapping(address => uint256) public revokesRemaining;
 
@@ -36,7 +35,7 @@ contract TCKT is IERC721 {
     uint256 private revokerlessPremium = (3 << 128) | uint256(2);
 
     function name() external pure override returns (string memory) {
-        return "TC Kimlik Tokeni";
+        return "KimlikDAO TC Kimlik Tokeni";
     }
 
     function symbol() external pure override returns (string memory) {
@@ -51,7 +50,7 @@ contract TCKT is IERC721 {
      * a personal information change occurs.
      */
     function balanceOf(address addr) external view override returns (uint256) {
-        return handles[addr] == 0 ? 0 : 1;
+        return handleOf[uint160(addr)] == 0 ? 0 : 1;
     }
 
     /**
@@ -108,7 +107,7 @@ contract TCKT is IERC721 {
      */
     function create(uint256 handle) external payable {
         require(msg.value >= (priceIn[address(0)] >> 128));
-        handles[msg.sender] = handle;
+        handleOf[uint160(msg.sender)] = handle;
         emit Transfer(address(this), msg.sender, handle);
     }
 
@@ -142,14 +141,10 @@ contract TCKT is IERC721 {
         payable
     {
         require(msg.value >= uint128(priceIn[address(0)]));
-        require(revokers.length > 0);
-        handles[msg.sender] = handle;
+        handleOf[uint160(msg.sender)] = handle;
         emit Transfer(address(this), msg.sender, handle);
         setRevokers(revokers);
     }
-
-    // TODO(KimlikDAO-bot) We need IERC20Permit support from BiLira to be able
-    //                     to accept TRYB.
 
     /**
      * @param handle           IPFS handle of the persisted TCKT.
@@ -159,7 +154,7 @@ contract TCKT is IERC721 {
         uint256 price = priceIn[address(token)] >> 128;
         require(price > 0);
         token.transferFrom(msg.sender, DAO_KASASI, price);
-        handles[msg.sender] = handle;
+        handleOf[uint160(msg.sender)] = handle;
         emit Transfer(address(this), msg.sender, handle);
     }
 
@@ -202,7 +197,7 @@ contract TCKT is IERC721 {
             );
         }
         token.transferFrom(msg.sender, DAO_KASASI, price);
-        handles[msg.sender] = handle;
+        handleOf[uint160(msg.sender)] = handle;
         emit Transfer(address(this), msg.sender, handle);
     }
 
@@ -221,7 +216,7 @@ contract TCKT is IERC721 {
         uint256 price = uint128(priceIn[address(token)]);
         require(price > 0);
         token.transferFrom(msg.sender, DAO_KASASI, price);
-        handles[msg.sender] = handle;
+        handleOf[uint160(msg.sender)] = handle;
         emit Transfer(address(this), msg.sender, handle);
         setRevokers(revokers);
     }
@@ -257,9 +252,23 @@ contract TCKT is IERC721 {
             );
         }
         token.transferFrom(msg.sender, DAO_KASASI, price);
-        handles[msg.sender] = handle;
+        handleOf[uint160(msg.sender)] = handle;
         emit Transfer(address(this), msg.sender, handle);
         setRevokers(revokers);
+    }
+
+    /**
+     * Appends a document to a TCKT.
+     *
+     * @param docHandle        IPFS hash of the persisted document.
+     */
+    function addDocument(uint256 docHandle) external {
+        uint256 handle = handleOf[uint160(msg.sender)];
+        require(handle != 0);
+        uint256 prevDoc = handleOf[handle];
+        handleOf[handle] = docHandle;
+        if (prevDoc != 0 && handleOf[docHandle] == 0)
+            handleOf[docHandle] = prevDoc;
     }
 
     /**
@@ -287,8 +296,8 @@ contract TCKT is IERC721 {
      * this method.
      */
     function revoke() external {
-        emit Transfer(msg.sender, address(this), handles[msg.sender]);
-        delete handles[msg.sender];
+        emit Transfer(msg.sender, address(this), handleOf[uint160(msg.sender)]);
+        delete handleOf[uint160(msg.sender)];
     }
 
     /**
@@ -310,9 +319,13 @@ contract TCKT is IERC721 {
         unchecked {
             if (senderWeight >= remaining) {
                 delete revokesRemaining[friend];
-                if (handles[friend] != 0) {
-                    emit Transfer(friend, address(this), handles[friend]);
-                    delete handles[friend];
+                if (handleOf[uint160(friend)] != 0) {
+                    emit Transfer(
+                        friend,
+                        address(this),
+                        handleOf[uint160(friend)]
+                    );
+                    delete handleOf[uint160(friend)];
                 }
             } else revokesRemaining[friend] = remaining - senderWeight;
         }
@@ -321,11 +334,12 @@ contract TCKT is IERC721 {
     /**
      * @notice Add a revoker or increase a revokers weight.
      *
-     * @param revoker          Address who is given the revoke vote permission.
-     * @param add              Additional weight given to the revoker.
+     * @param deltaAndRevoker  Address who is given the revoke vote permission.
      */
-    function addRevoker(address revoker, uint256 add) external {
-        uint256 weight = revokerWeight[msg.sender][revoker] + add;
+    function addRevoker(uint256 deltaAndRevoker) external {
+        address revoker = address(uint160(deltaAndRevoker));
+        uint256 weight = revokerWeight[msg.sender][revoker] +
+            (deltaAndRevoker >> 160);
         revokerWeight[msg.sender][revoker] = weight;
         emit RevokerAssignment(msg.sender, revoker, weight);
     }
