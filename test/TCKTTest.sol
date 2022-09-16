@@ -5,9 +5,9 @@ pragma solidity 0.8.16;
 import "contracts/TCKT.sol";
 import "forge-std/Test.sol";
 import "interfaces/Addresses.sol";
+import "interfaces/AvalancheTokens.sol";
 import "interfaces/IERC20Permit.sol";
-import "interfaces/test/MockTokens.sol";
-import "interfaces/Tokens.sol";
+import "interfaces/testing/MockTokens.sol";
 
 contract TCKTTest is Test {
     TCKT private tckt;
@@ -103,8 +103,8 @@ contract TCKTTest is Test {
         tckt.createWithRevokers(123123123, revokers);
 
         assertEq(tckt.balanceOf(address(this)), 1);
-        tckt.addRevoker(uint256(3) << 160 | uint160(vm.addr(11)));
-        tckt.addRevoker(uint256(1) << 160 | uint160(vm.addr(12)));
+        tckt.addRevoker((uint256(3) << 160) | uint160(vm.addr(11)));
+        tckt.addRevoker((uint256(1) << 160) | uint160(vm.addr(12)));
 
         vm.prank(vm.addr(11));
         tckt.revokeFriend(address(this));
@@ -117,10 +117,10 @@ contract TCKTTest is Test {
 
     function testAuthenticationPriceFeeder() public {
         vm.expectRevert();
-        tckt.updatePrice(vm.addr(1), 15);
+        tckt.updatePrice((15 << 160) | uint160(vm.addr(1)));
 
-        vm.prank(TCKT_PRICE_FEEDER);
-        tckt.updatePrice(vm.addr(1), 15);
+        vm.prank(OYLAMA);
+        tckt.updatePrice((15 << 160) | uint160(vm.addr(1)));
         assertEq(uint128(tckt.priceIn(vm.addr(1))), 15);
 
         uint256[] memory prices = new uint256[](1);
@@ -129,7 +129,7 @@ contract TCKTTest is Test {
         vm.expectRevert();
         tckt.updatePricesBulk((1 << 128) + 1, prices);
 
-        vm.prank(TCKT_PRICE_FEEDER);
+        vm.prank(OYLAMA);
         tckt.updatePricesBulk((1 << 128) + 1, prices);
         assertEq(uint128(tckt.priceIn(address(1337))), 17);
     }
@@ -148,8 +148,8 @@ contract TCKTTest is Test {
     }
 
     function testCreate() public {
-        vm.prank(TCKT_PRICE_FEEDER);
-        tckt.updatePrice(address(0), 0.05 ether);
+        vm.prank(OYLAMA);
+        tckt.updatePrice(5e16 << 160);
 
         vm.expectRevert();
         tckt.create(123123123);
@@ -157,14 +157,14 @@ contract TCKTTest is Test {
         vm.expectRevert();
         tckt.create{value: 0.04 ether}(123123123);
 
-        vm.prank(TCKT_PRICE_FEEDER);
-        tckt.updatePrice(address(0), 0.04 ether);
+        vm.prank(OYLAMA);
+        tckt.updatePrice(4e16 << 160);
 
         tckt.create{value: 0.06 ether}(1231231233);
         tckt.create{value: 0.07 ether}(123123123);
 
-        vm.prank(TCKT_PRICE_FEEDER);
-        tckt.updatePrice(address(0), 0.05 ether);
+        vm.prank(OYLAMA);
+        tckt.updatePrice(5e16 << 160);
 
         vm.expectRevert();
         tckt.create{value: 0.074 ether}(123123123);
@@ -214,9 +214,9 @@ contract TCKTTest is Test {
     function testUSDTPayment() public {
         DeployMockTokens();
 
-        vm.prank(TCKT_PRICE_FEEDER);
+        vm.prank(OYLAMA);
         // Set TCKT price to 2 USDT
-        tckt.updatePrice(address(USDT), 2e6);
+        tckt.updatePrice((2e6 << 160) | uint160(address(USDT)));
 
         vm.prank(USDT_DEPLOYER);
         USDT.transfer(vm.addr(0x1337ACC), 15e6);

@@ -19,7 +19,7 @@ contract TCKT is IERC721 {
     /// @notice When a TCKT holder gets their wallet private key exposed
     /// they can either revoke it themselves, or use social revoking.
     /// If they are unable to do either, an exposure report needs to be
-    /// filed through a KimlikAŞ authentication.
+    /// filed through https://kimlikdao.org/report.
     event ExposureReport(bytes32 indexed humanID, uint256 timestamp);
     event PriceChange(address indexed token, uint256 price);
 
@@ -27,8 +27,8 @@ contract TCKT is IERC721 {
     mapping(address => mapping(address => uint256)) public revokerWeight;
     mapping(address => uint256) public revokesRemaining;
 
-    /// Maps a HumanID("KimlikDAO:TCKT:exposure") to a reported exposure
-    /// timestamp, or zero if no exposure has been reported.
+    /// Maps a HumanID("TCKT:exposure") to a reported exposure timestamp,
+    /// or zero if no exposure has been reported.
     mapping(bytes32 => uint256) public exposureReported;
 
     mapping(address => uint256) public priceIn;
@@ -258,6 +258,15 @@ contract TCKT is IERC721 {
     }
 
     /**
+     * @param handle           Updates the contents of the TCKT with the given
+     *                         IFPS handle.
+     */
+    function update(uint256 handle) external {
+        require(handleOf[uint160(msg.sender)] != 0);
+        handleOf[uint160(msg.sender)] = handle;
+    }
+
+    /**
      * Appends a document to a TCKT.
      *
      * @param docHandle        IPFS hash of the persisted document.
@@ -272,15 +281,15 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice Add a HumanID("KimlikDAO:TCKT:exposure") to exposed list.
+     * @notice Add a HumanID("TCKT:exposure") to exposed list.
      * This can be invoked only by a 2-of-2 threshold signature of
      * KimlikDAO and KimlikAŞ.
      *
-     * @param humanID          HumanID("KimlikDAO:TCKT:exposure") of the person
-     *                         who reported the private key exposure.
+     * @param humanID          HumanID("TCKT:exposure") of the person whose
+     *                         private keys were compromised.
      *
      * TCKT validators are expected to consider all presented TCKTs with
-     * the HumanID("KimlikDAO:TCKT:exposure") equaling `humanID` and issuance
+     * the HumanID("TCKT:exposure") equaling `humanID` and issuance
      * date earlier than `exposureReported[humanID]` as invalid.
      */
     function reportExposure(bytes32 humanID) external {
@@ -369,10 +378,12 @@ contract TCKT is IERC721 {
     function updatePricesBulk(uint256 premium, uint256[] calldata prices)
         external
     {
-        require(msg.sender == TCKT_PRICE_FEEDER);
+        require(msg.sender == OYLAMA);
         unchecked {
             revokerlessPremium = premium;
             for (uint256 i = 0; i < prices.length; ++i) {
+                // We avoid calling `updatePrice()` so as no to read
+                // `revokerlessPremium` from storage.
                 address token = address(uint160(prices[i]));
                 uint256 price = prices[i] >> 160;
                 uint256 t = (price * premium) / uint128(premium);
@@ -385,14 +396,16 @@ contract TCKT is IERC721 {
     /**
      * Updates the price of a TCKT denominated in a certain token.
      *
-     * @param token            Contract address for a IERC20Permit token or the
-     *                         zero address, which is understood as the native
+     * @param priceAndToken    The price as a 96 bit integer, followed by the
+     *                         token address for a IERC20 token or the zero
+     *                         address, which is understood as the native
      *                         token.
-     * @param price            Price of TCKT denominated in given token.
      */
-    function updatePrice(address token, uint256 price) external {
-        require(msg.sender == TCKT_PRICE_FEEDER);
+    function updatePrice(uint256 priceAndToken) external {
+        require(msg.sender == OYLAMA);
         unchecked {
+            address token = address(uint160(priceAndToken));
+            uint256 price = priceAndToken >> 160;
             uint256 premium = revokerlessPremium;
             uint256 t = (price * premium) / uint128(premium);
             priceIn[token] = (t & (type(uint256).max << 128)) | price;

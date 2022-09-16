@@ -6,7 +6,7 @@ import "contracts/TCKT.sol";
 import "forge-std/Test.sol";
 import "interfaces/Addresses.sol";
 import "interfaces/IERC20Permit.sol";
-import "interfaces/test/MockTokens.sol";
+import "interfaces/testing/MockTokens.sol";
 
 contract TCKTTest is Test {
     TCKT private tckt;
