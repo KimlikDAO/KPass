@@ -418,6 +418,62 @@ contract TCKT is IERC721 {
         }
     }
 
+    // keccak256("RevokeFriendFor(address friend)");
+    bytes32 public constant REVOKE_FRIEND_FOR_TYPEHASH =
+        0xfbf2f0fb915c060d6b3043ea7458b132e0cbcd7973bac5644e78e4f17cd28b8e;
+
+    /**
+     * Cast a social revoke vote by signature.
+     *
+     * This method is particulatly useful when the revoker is virtual; the TCKT
+     * owner generates a private key and immediately signs a `revokeFriendFor`
+     * request and e-mails the signature to a fiend. This way a friend who
+     * doesn't have an EVM adress (but an email address) can cast a social
+     * revoke vote.
+     *
+     * @param r                ECDSA r value
+     * @param ss               ECDSA s value and the elliptic curve v parameter
+     *                         combined.
+     */
+    function revokeFriendFor(
+        address friend,
+        bytes32 r,
+        uint256 ss
+    ) external {
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(abi.encode(REVOKE_FRIEND_FOR_TYPEHASH, friend))
+            )
+        );
+        unchecked {
+            address revoker = ecrecover(
+                digest,
+                uint8(ss >> 255) + 27,
+                r,
+                bytes32(ss & ((1 << 255) - 1))
+            );
+            require(revoker != address(0));
+            uint256 remaining = revokesRemaining[friend];
+            uint256 revokerW = revokerWeight[friend][revoker];
+            require(revokerW > 0);
+            delete revokerWeight[friend][revoker];
+
+            if (revokerW >= remaining) {
+                delete revokesRemaining[friend];
+                if (handleOf[uint160(friend)] != 0) {
+                    emit Transfer(
+                        friend,
+                        address(this),
+                        handleOf[uint160(friend)]
+                    );
+                    delete handleOf[uint160(friend)];
+                }
+            } else revokesRemaining[friend] = remaining - revokerW;
+        }
+    }
+
     /**
      * @notice Add a revoker or increase a revokers weight.
      *
