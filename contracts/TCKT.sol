@@ -275,6 +275,25 @@ contract TCKT is IERC721 {
     bytes32 public constant CREATE_FOR_TYPEHASH =
         0xe0b70ef26ac646b5fe42b7831a9d039e8afa04a2698e03b3321e5ca3516efe70;
 
+    /**
+     * Creates a TCKT on users behalf, covering the tx fee.
+     *
+     * The user has to explicitly authorize the TCKT creation with the
+     * (createR, createSS) signature and the token payment with the
+     * (paymentR, paymentSS) signature.
+     *
+     * The gas fee is paid by the transaction sender, which typically is
+     * someone other than the TCKT owner. This enables gasless TCKT mints,
+     * wherein the gas fee is covered by the KimlikDAO gas station.
+     *
+     * @param handle           IPFS handle with which to create the TCKT.
+     * @param createR          ECDSA r of the create signature.
+     * @param createSS         Combined v and s values for the signature.
+     * @param deadlineAndToken The payment token and the deadline for the token
+     *                         permit signature.
+     * @param paymentR         ECDSA r of the permit signature.
+     * @param paymentSS        Combined v and s values for the above signature.
+     */
     function createFor(
         uint256 handle,
         bytes32 createR,
@@ -441,7 +460,7 @@ contract TCKT is IERC721 {
         unchecked {
             revokerlessPremium = premium;
             for (uint256 i = 0; i < prices.length; ++i) {
-                // We avoid calling `updatePrice()` so as no to read
+                // We avoid calling `updatePrice()` so as not to read
                 // `revokerlessPremium` from storage.
                 address token = address(uint160(prices[i]));
                 uint256 price = prices[i] >> 160;
