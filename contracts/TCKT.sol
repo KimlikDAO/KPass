@@ -257,6 +257,65 @@ contract TCKT is IERC721 {
         setRevokers(revokers);
     }
 
+    // keccak256(
+    //     abi.encode(
+    //         keccak256(
+    //             "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+    //         ),
+    //         keccak256(bytes("TCKT")),
+    //         keccak256(bytes("1")),
+    //         43114,
+    //         TCKT_ADDR
+    //     )
+    // );
+    bytes32 public constant DOMAIN_SEPARATOR =
+        0x7f09fc8776645c556371127677a2206a00976e7f49fa8690739ee07c5b3bc805;
+
+    // keccak256("CreateFor(uint256 handle)")
+    bytes32 public constant CREATE_FOR_TYPEHASH =
+        0xe0b70ef26ac646b5fe42b7831a9d039e8afa04a2698e03b3321e5ca3516efe70;
+
+    function createFor(
+        uint256 handle,
+        bytes32 createR,
+        uint256 createSS,
+        uint256 deadlineAndToken,
+        bytes32 paymentR,
+        uint256 paymentSS
+    ) external {
+        IERC20Permit token = IERC20Permit(address(uint160(deadlineAndToken)));
+        uint256 price = priceIn[address(token)] >> 128;
+        require(price > 0);
+        unchecked {
+            bytes32 digest = keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    DOMAIN_SEPARATOR,
+                    keccak256(abi.encode(CREATE_FOR_TYPEHASH, handle))
+                )
+            );
+            address signer = ecrecover(
+                digest,
+                uint8(createSS >> 255) + 27,
+                createR,
+                bytes32(createSS & ((1 << 255) - 1))
+            );
+            require(signer != address(0) && handleOf[uint160(signer)] == 0);
+            token.permit(
+                signer,
+                address(this),
+                price,
+                deadlineAndToken >> 160,
+                uint8(paymentSS >> 255) + 27,
+                paymentR,
+                bytes32(paymentSS & ((1 << 255) - 1))
+            );
+            token.transferFrom(signer, DAO_KASASI, price);
+            handleOf[uint160(signer)] = handle;
+            emit Transfer(address(this), signer, handle);
+        }
+    }
+
     /**
      * @param handle           Updates the contents of the TCKT with the given
      *                         IFPS handle.

@@ -273,4 +273,87 @@ contract TCKTTest is Test {
             tckt.createWithTokenPermit(123123123, deadlineAndToken, r, ss);
         }
     }
+
+    bytes32 DOMAIN_SEPARATOR =
+        0x7f09fc8776645c556371127677a2206a00976e7f49fa8690739ee07c5b3bc805;
+
+    // keccak256("CreateFor(uint256 handle)")
+    bytes32 CREATE_FOR_TYPEHASH =
+        0xe0b70ef26ac646b5fe42b7831a9d039e8afa04a2698e03b3321e5ca3516efe70;
+
+    function authorizeCreateFor(uint256 handle)
+        public
+        returns (bytes32, uint256)
+    {
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(abi.encode(CREATE_FOR_TYPEHASH, handle))
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(0x1337ACC, digest);
+        return (r, (uint256(v - 27) << 255) | uint256(s));
+    }
+
+    function testCreateFor() public {
+        DeployMockTokens();
+
+        vm.prank(OYLAMA);
+        // Set TCKT price to 2 USDT
+        tckt.updatePrice((2e6 << 160) | uint160(address(USDT)));
+
+        vm.prank(USDT_DEPLOYER);
+        USDT.transfer(vm.addr(0x1337ACC), 15e6);
+
+        {
+            uint256 deadline = block.timestamp + 1200;
+            (uint8 v, bytes32 paymentR, bytes32 s) = authorizePayment(
+                USDT,
+                3e6, // 2 * 1.5 for revokerless premium.
+                deadline,
+                0
+            );
+
+            uint256 deadlineAndToken = (deadline << 160) |
+                uint160(address(USDT));
+            uint256 paymentSS = (uint256(v - 27) << 255) | uint256(s);
+            (bytes32 createR, uint256 createSS) = authorizeCreateFor(123123123);
+            tckt.createFor(
+                123123123,
+                createR,
+                createSS,
+                deadlineAndToken,
+                paymentR,
+                paymentSS
+            );
+            assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
+        }
+
+        vm.prank(vm.addr(0x1337ACC));
+        tckt.revoke();
+        {
+            uint256 deadline = block.timestamp + 1200;
+            (uint8 v, bytes32 paymentR, bytes32 s) = authorizePayment(
+                USDT,
+                2.99e6,
+                deadline,
+                0
+            );
+
+            uint256 deadlineAndToken = (deadline << 160) |
+                uint160(address(USDT));
+            uint256 paymentSS = (uint256(v - 27) << 255) | uint256(s);
+            (bytes32 createR, uint256 createSS) = authorizeCreateFor(123123123);
+            vm.expectRevert();
+            tckt.createFor(
+                123123123,
+                createR,
+                createSS,
+                deadlineAndToken,
+                paymentR,
+                paymentSS
+            );
+        }
+    }
 }
