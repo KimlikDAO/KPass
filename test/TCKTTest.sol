@@ -74,7 +74,7 @@ contract TCKTTest is Test {
         assertEq(tckt.balanceOf(address(this)), 0);
     }
 
-    function testRevokeFriendFor() public {
+    function testRevokeFriendForContributor() public {
         vm.prank(vm.addr(0x1337ACC));
         tckt.createWithRevokers(
             123123123,
@@ -115,6 +115,51 @@ contract TCKTTest is Test {
 
         vm.prank(vm.addr(11));
         tckt.revokeFriend(vm.addr(0x1337ACC));
+
+        assertEq(tckt.balanceOf(address(this)), 0);
+    }
+
+    function testRevokeFriendFor() public {
+        vm.prank(vm.addr(0x1337ACC));
+        tckt.createWithRevokers(
+            123123123,
+            [
+                (uint256(4) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(1) << 160) | uint160(vm.addr(11)),
+                (uint256(1) << 160) | uint160(vm.addr(12)),
+                (uint256(1) << 160) | uint160(vm.addr(13)),
+                (uint256(1) << 160) | uint160(vm.addr(14))
+            ]
+        );
+
+        assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
+
+        vm.prank(vm.addr(11));
+        tckt.revokeFriend(vm.addr(0x1337ACC));
+
+        assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
+
+        bytes32 REVOKE_FRIEND_FOR_TYPEHASH = keccak256(
+            "RevokeFriendFor(address friend)"
+        );
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(
+                    abi.encode(REVOKE_FRIEND_FOR_TYPEHASH, vm.addr(0x1337ACC))
+                )
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(10, digest);
+        vm.prank(vm.addr(100));
+        tckt.revokeFriendFor(
+            vm.addr(0x1337ACC),
+            r,
+            (uint256(v - 27) << 255) | uint256(s)
+        );
 
         assertEq(tckt.balanceOf(address(this)), 0);
     }
