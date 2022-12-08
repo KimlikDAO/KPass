@@ -435,4 +435,41 @@ contract TCKTTest is Test {
             );
         }
     }
+
+    function testAuthenticationValidtorNodes() public {
+        vm.prank(OYLAMA);
+        tckt.addValidatorNode(vm.addr(10));
+
+        vm.expectRevert();
+        tckt.addValidatorNode(vm.addr(11));
+
+        vm.prank(OYLAMA);
+        tckt.banValidatorNode(vm.addr(12));
+
+        vm.expectRevert();
+        tckt.banValidatorNode(vm.addr(13));
+    }
+
+    function testValidatorNodes() public {
+        vm.warp(131);
+        vm.prank(OYLAMA);
+        tckt.addValidatorNode(vm.addr(131150));
+
+        vm.expectRevert();
+        tckt.addValidatorNode(vm.addr(131150));
+
+        vm.warp(150);
+        vm.prank(OYLAMA);
+        tckt.banValidatorNode(vm.addr(131150));
+
+        assertEq(
+            tckt.validatorNodes(vm.addr(131150)),
+            (uint256(131) << 128) + 150
+        );
+
+        vm.warp(160);
+        vm.prank(OYLAMA);
+        vm.expectRevert();
+        tckt.banValidatorNode(vm.addr(131150));
+    }
 }

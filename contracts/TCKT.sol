@@ -570,7 +570,7 @@ contract TCKT is IERC721 {
     //
     ///////////////////////////////////////////////////////////////////////////
 
-    mapping(address => uint256) public validatorNodeAddresses;
+    mapping(address => uint256) public validatorNodes;
 
     /**
      * Marks a node as a validator as of the current blocktime.
@@ -580,7 +580,8 @@ contract TCKT is IERC721 {
     function addValidatorNode(address nodeAddr) external {
         require(msg.sender == OYLAMA);
         unchecked {
-            validatorNodeAddresses[nodeAddr] = block.timestamp << 128;
+            require(validatorNodes[nodeAddr] == 0);
+            validatorNodes[nodeAddr] = block.timestamp << 128;
         }
     }
 
@@ -593,11 +594,9 @@ contract TCKT is IERC721 {
     function banValidatorNode(address nodeAddr) external {
         require(msg.sender == OYLAMA);
         unchecked {
-            uint256 timestamp = validatorNodeAddresses[nodeAddr];
+            uint256 timestamp = validatorNodes[nodeAddr];
             require(uint128(timestamp) == 0);
-            validatorNodeAddresses[nodeAddr] =
-                timestamp |
-                uint128(block.timestamp);
+            validatorNodes[nodeAddr] = timestamp | uint128(block.timestamp);
         }
     }
 
@@ -646,7 +645,7 @@ contract TCKT is IERC721 {
                 r1,
                 bytes32(yParityAndS1 & ((1 << 255) - 1))
             );
-            uint256 ts1 = validatorNodeAddresses[node1];
+            uint256 ts1 = validatorNodes[node1];
             require(
                 ts1 != 0 && (uint128(ts1) == 0 || uint128(ts1) > timestamp)
             );
@@ -657,7 +656,7 @@ contract TCKT is IERC721 {
                 r2,
                 bytes32(yParityAndS2 & ((1 << 255) - 1))
             );
-            uint256 ts2 = validatorNodeAddresses[node2];
+            uint256 ts2 = validatorNodes[node2];
             require(
                 node2 != node1 &&
                     ts2 != 0 &&
@@ -670,7 +669,7 @@ contract TCKT is IERC721 {
                 r3,
                 bytes32(yParityAndS3 & ((1 << 255) - 1))
             );
-            uint256 ts3 = validatorNodeAddresses[node2];
+            uint256 ts3 = validatorNodes[node2];
             require(
                 node3 != node1 &&
                     node3 != node2 &&
