@@ -581,7 +581,7 @@ contract TCKT is IERC721 {
         require(msg.sender == OYLAMA);
         unchecked {
             require(validatorNodes[nodeAddr] == 0);
-            validatorNodes[nodeAddr] = block.timestamp << 128;
+            validatorNodes[nodeAddr] = block.timestamp << 64;
         }
     }
 
@@ -595,8 +595,8 @@ contract TCKT is IERC721 {
         require(msg.sender == OYLAMA);
         unchecked {
             uint256 timestamp = validatorNodes[nodeAddr];
-            require(uint128(timestamp) == 0);
-            validatorNodes[nodeAddr] = timestamp | uint128(block.timestamp);
+            require(uint64(timestamp) == 0);
+            validatorNodes[nodeAddr] = timestamp | uint64(block.timestamp);
         }
     }
 
@@ -607,7 +607,7 @@ contract TCKT is IERC721 {
     /// new address), with which they can file an exposure report via the
     /// `reportExposure()` method. Doing so invalidates all TCKTs they have
     /// obtained before the timestamp of their most recent TCKT.
-    event ExposureReport(bytes32 indexed exposureReportID, uint256 timestamp);
+    event ExposureReport(bytes32 indexed exposureReportID, uint64 timestamp);
 
     /// Maps a `exposureReportID` to a reported exposure timestamp,
     /// or zero if no exposure has been reported.
@@ -615,6 +615,8 @@ contract TCKT is IERC721 {
 
     /**
      * @notice Add a `exposureReportID` to exposed list.
+     * A nonce is not needed since the `exposureReported[exposureReportID]`
+     * value can only be incremented.
      *
      * @param exposureReportID of the person whose wallet keys were exposed.
      * @param timestamp        of the exposureReportID signatures.
@@ -627,7 +629,7 @@ contract TCKT is IERC721 {
      */
     function reportExposure(
         bytes32 exposureReportID,
-        uint256 timestamp,
+        uint64 timestamp,
         bytes32 r1,
         uint256 yParityAndS1,
         bytes32 r2,
@@ -646,9 +648,7 @@ contract TCKT is IERC721 {
                 bytes32(yParityAndS1 & ((1 << 255) - 1))
             );
             uint256 ts1 = validatorNodes[node1];
-            require(
-                ts1 != 0 && (uint128(ts1) == 0 || uint128(ts1) > timestamp)
-            );
+            require(ts1 != 0 && (uint64(ts1) == 0 || uint64(ts1) > timestamp));
 
             address node2 = ecrecover(
                 digest,
@@ -660,7 +660,7 @@ contract TCKT is IERC721 {
             require(
                 node2 != node1 &&
                     ts2 != 0 &&
-                    (uint128(ts2) == 0 || uint128(ts2) > timestamp)
+                    (uint64(ts2) == 0 || uint64(ts2) > timestamp)
             );
 
             address node3 = ecrecover(
@@ -674,9 +674,11 @@ contract TCKT is IERC721 {
                 node3 != node1 &&
                     node3 != node2 &&
                     ts3 != 0 &&
-                    (uint128(ts3) == 0 || uint128(ts3) > timestamp)
+                    (uint64(ts3) == 0 || uint64(ts3) > timestamp)
             );
         }
+        // Exposure report timestamp can only be incremented.
+        require(exposureReported[exposureReportID] < timestamp);
         exposureReported[exposureReportID] = timestamp;
         emit ExposureReport(exposureReportID, timestamp);
     }

@@ -464,12 +464,79 @@ contract TCKTTest is Test {
 
         assertEq(
             tckt.validatorNodes(vm.addr(131150)),
-            (uint256(131) << 128) + 150
+            (uint256(131) << 64) + 150
         );
 
         vm.warp(160);
         vm.prank(OYLAMA);
         vm.expectRevert();
         tckt.banValidatorNode(vm.addr(131150));
+    }
+
+    function signOffExposureReport(
+        bytes32 exposureReportID,
+        uint64 timestamp,
+        uint256 signerKey
+    ) internal pure returns (bytes32, uint256) {
+        bytes32 digest = keccak256(
+            abi.encodePacked(exposureReportID, timestamp)
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
+        return (r, uint256(s) | ((uint256(v) - 27) << 255));
+    }
+
+    function testReportExposure() public {
+        bytes32 exposureReportID = bytes32(uint256(0xcCc));
+
+        vm.warp(1000);
+        vm.startPrank(OYLAMA);
+        tckt.addValidatorNode(vm.addr(111));
+        tckt.addValidatorNode(vm.addr(222));
+        tckt.addValidatorNode(vm.addr(333));
+        tckt.addValidatorNode(vm.addr(444));
+        tckt.addValidatorNode(vm.addr(555));
+        vm.stopPrank();
+
+        (bytes32 r1, uint256 yParityAndS1) = signOffExposureReport(
+            exposureReportID,
+            1001,
+            111
+        );
+        (bytes32 r2, uint256 yParityAndS2) = signOffExposureReport(
+            exposureReportID,
+            1001,
+            222
+        );
+        (bytes32 r3, uint256 yParityAndS3) = signOffExposureReport(
+            exposureReportID,
+            1001,
+            333
+        );
+        (bytes32 r4, uint256 yParityAndS4) = signOffExposureReport(
+            exposureReportID,
+            1001,
+            444
+        );
+        tckt.reportExposure(
+            exposureReportID,
+            1001,
+            r1,
+            yParityAndS1,
+            r2,
+            yParityAndS2,
+            r3,
+            yParityAndS3
+        );
+        vm.expectRevert();
+        tckt.reportExposure(
+            exposureReportID,
+            1001,
+            r1,
+            yParityAndS1,
+            r2,
+            yParityAndS2,
+            r4,
+            yParityAndS4
+        );
     }
 }
