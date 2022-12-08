@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.16;
+pragma solidity 0.8.17;
 
 import "contracts/TCKT.sol";
 import "forge-std/Test.sol";
@@ -8,7 +8,7 @@ import "interfaces/Addresses.sol";
 import "interfaces/IERC20Permit.sol";
 import "interfaces/testing/MockTokens.sol";
 
-contract TCKTTest is Test {
+contract TCKTGasTest is Test {
     TCKT private tckt;
 
     function setUp() public {

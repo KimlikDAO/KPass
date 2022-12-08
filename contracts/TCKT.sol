@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.16;
+pragma solidity 0.8.17;
 
 import "interfaces/Addresses.sol";
 import "interfaces/IERC20Permit.sol";
@@ -16,22 +16,10 @@ contract TCKT is IERC721 {
         address indexed revoker,
         uint256 weight
     );
-    /// @notice When a TCKT holder gets their wallet private key exposed
-    /// they can either revoke it themselves, or use social revoking.
-    /// If they are unable to do either, an exposure report needs to be
-    /// filed through https://kimlikdao.org/report.
-    event ExposureReport(bytes32 indexed humanID, uint256 timestamp);
-    event PriceChange(address indexed token, uint256 price);
 
     mapping(uint256 => uint256) public handleOf;
     mapping(address => mapping(address => uint256)) public revokerWeight;
     mapping(address => uint256) public revokesRemaining;
-
-    /// Maps a HumanID("TCKT:exposure") to a reported exposure timestamp,
-    /// or zero if no exposure has been reported.
-    mapping(bytes32 => uint256) public exposureReported;
-
-    mapping(address => uint256) public priceIn;
     uint256 private revokerlessPremium = (3 << 128) | uint256(2);
 
     function name() external pure override returns (string memory) {
@@ -71,16 +59,16 @@ contract TCKT is IERC721 {
             );
             uint256 magic = 0x4e5a461f976ce5b9229582822e96e6269e5d6f18a5960a04480c6825748ba04;
             bytes
-                memory out = "ipfs://Qm____________________________________________";
-            out[52] = toChar[id % 58];
+                memory out = "https://ipfs.kimlikdao.org/ipfs/Qm____________________________________________";
+            out[77] = toChar[id % 58];
             id /= 58;
-            for (uint256 p = 51; p > 9; --p) {
+            for (uint256 p = 76; p > 34; --p) {
                 uint256 t = id + (magic & 63);
                 out[p] = toChar[t % 58];
                 magic >>= 6;
                 id = t / 58;
             }
-            out[9] = toChar[id + 21];
+            out[34] = toChar[id + 21];
             return string(out);
         }
     }
@@ -125,6 +113,13 @@ contract TCKT is IERC721 {
      */
     function sweepNativeToken() external {
         DAO_KASASI.transfer(address(this).balance);
+    }
+
+    /**
+     * Move ERC20 tokens sent to this address by accident to `DAO_KASASI`.
+     */
+    function sweepToken(IERC20 token) external {
+        token.transfer(DAO_KASASI, token.balanceOf(address(this)));
     }
 
     /**
@@ -173,14 +168,14 @@ contract TCKT is IERC721 {
      * @param deadlineAndToken Contract address of a IERC20Permit token and
      *                         the timestamp until which the payment
      *                         authorization is valid for.
-     * @param r                random curve point x coordinate.
-     * @param ss               mapped curve point of the signature.
+     * @param r                ECDSA r value of the token spend permit.
+     * @param yParityAndS      ECSSA s and v values combined.
      */
     function createWithTokenPermit(
         uint256 handle,
         uint256 deadlineAndToken,
         bytes32 r,
-        uint256 ss
+        uint256 yParityAndS
     ) external {
         IERC20Permit token = IERC20Permit(address(uint160(deadlineAndToken)));
         uint256 price = priceIn[address(token)] >> 128;
@@ -191,9 +186,9 @@ contract TCKT is IERC721 {
                 address(this),
                 price,
                 deadlineAndToken >> 160,
-                uint8(ss >> 255) + 27,
+                uint8(yParityAndS >> 255) + 27,
                 r,
-                bytes32(ss & ((1 << 255) - 1))
+                bytes32(yParityAndS & ((1 << 255) - 1))
             );
         }
         token.transferFrom(msg.sender, DAO_KASASI, price);
@@ -227,15 +222,15 @@ contract TCKT is IERC721 {
      *                         into a single word, where the weight is a uint96
      *                         and the address is 20 bytes.
      * @param deadlineAndToken Contract address of a IERC20Permit token.
-     * @param r                random curve point x coordinate.
-     * @param ss               mapped curve point of the signature.
+     * @param r                ECDSA r value of the token spend permit.
+     * @param yParityAndS      ECSSA s and v values combined.
      */
     function createWithRevokersWithTokenPermit(
         uint256 handle,
         uint256[5] calldata revokers,
         uint256 deadlineAndToken,
         bytes32 r,
-        uint256 ss
+        uint256 yParityAndS
     ) external {
         IERC20Permit token = IERC20Permit(address(uint160(deadlineAndToken)));
         uint256 price = uint128(priceIn[address(token)]);
@@ -246,9 +241,9 @@ contract TCKT is IERC721 {
                 address(this),
                 price,
                 deadlineAndToken >> 160,
-                uint8(ss >> 255) + 27,
+                uint8(yParityAndS >> 255) + 27,
                 r,
-                bytes32(ss & ((1 << 255) - 1))
+                bytes32(yParityAndS & ((1 << 255) - 1))
             );
         }
         token.transferFrom(msg.sender, DAO_KASASI, price);
@@ -287,12 +282,12 @@ contract TCKT is IERC721 {
      * wherein the gas fee is covered by the KimlikDAO gas station.
      *
      * @param handle           IPFS handle with which to create the TCKT.
-     * @param createR          ECDSA r of the create signature.
-     * @param createSS         Combined v and s values for the signature.
+     * @param createR          ECDSA r value of the create signature.
+     * @param createSS         ECDSA s and v values combined.
      * @param deadlineAndToken The payment token and the deadline for the token
      *                         permit signature.
-     * @param paymentR         ECDSA r of the permit signature.
-     * @param paymentSS        Combined v and s values for the above signature.
+     * @param paymentR         ECDSA r value of the token spend permit signature.
+     * @param paymentSS        ECDSA s and v values combined.
      */
     function createFor(
         uint256 handle,
@@ -358,22 +353,36 @@ contract TCKT is IERC721 {
             handleOf[docHandle] = prevDoc;
     }
 
-    /**
-     * @notice Add a HumanID("TCKT:exposure") to exposed list.
-     * This can be invoked only by a 2-of-2 threshold signature of
-     * KimlikDAO and KimlikAŞ.
-     *
-     * @param humanID          HumanID("TCKT:exposure") of the person whose
-     *                         private keys were compromised.
-     *
-     * TCKT validators are expected to consider all presented TCKTs with
-     * the HumanID("TCKT:exposure") equaling `humanID` and issuance
-     * date earlier than `exposureReported[humanID]` as invalid.
-     */
-    function reportExposure(bytes32 humanID) external {
-        require(msg.sender == TCKT_2OF2_EXPOSURE_REPORTER);
-        exposureReported[humanID] = block.timestamp;
-        emit ExposureReport(humanID, block.timestamp);
+    function setRevokers(uint256[5] calldata revokers) internal {
+        revokesRemaining[msg.sender] = revokers[0] >> 192;
+
+        address rev0Addr = address(uint160(revokers[0]));
+        uint256 rev0Weight = (revokers[0] >> 160) & type(uint32).max;
+        require(rev0Addr != address(0) && rev0Addr != msg.sender);
+        revokerWeight[msg.sender][rev0Addr] = rev0Weight;
+        emit RevokerAssignment(msg.sender, rev0Addr, rev0Weight);
+
+        address rev1Addr = address(uint160(revokers[1]));
+        require(rev1Addr != address(0) && rev1Addr != msg.sender);
+        require(rev1Addr != rev0Addr);
+        revokerWeight[msg.sender][rev1Addr] = revokers[1] >> 160;
+        emit RevokerAssignment(msg.sender, rev1Addr, revokers[1] >> 160);
+
+        address rev2Addr = address(uint160(revokers[2]));
+        require(rev2Addr != address(0) && rev2Addr != msg.sender);
+        require(rev2Addr != rev1Addr && rev2Addr != rev0Addr);
+        revokerWeight[msg.sender][rev2Addr] = revokers[2] >> 160;
+        emit RevokerAssignment(msg.sender, rev2Addr, revokers[2] >> 160);
+
+        address rev3Addr = address(uint160(revokers[3]));
+        if (rev3Addr == address(0)) return;
+        revokerWeight[msg.sender][rev3Addr] = revokers[3] >> 160;
+        emit RevokerAssignment(msg.sender, rev3Addr, revokers[3] >> 160);
+
+        address rev4Addr = address(uint160(revokers[4]));
+        if (rev4Addr == address(0)) return;
+        revokerWeight[msg.sender][rev4Addr] = revokers[4] >> 160;
+        emit RevokerAssignment(msg.sender, rev4Addr, revokers[4] >> 160);
     }
 
     /**
@@ -431,14 +440,13 @@ contract TCKT is IERC721 {
      * doesn't have an EVM adress (but an email address) can cast a social
      * revoke vote.
      *
-     * @param r                ECDSA r value
-     * @param ss               ECDSA s value and the elliptic curve v parameter
-     *                         combined.
+     * @param r                ECDSA r value for revokeFriendFor signature.
+     * @param yParityAndS      ECDSA s and v values combined.
      */
     function revokeFriendFor(
         address friend,
         bytes32 r,
-        uint256 ss
+        uint256 yParityAndS
     ) external {
         bytes32 digest = keccak256(
             abi.encodePacked(
@@ -450,9 +458,9 @@ contract TCKT is IERC721 {
         unchecked {
             address revoker = ecrecover(
                 digest,
-                uint8(ss >> 255) + 27,
+                uint8(yParityAndS >> 255) + 27,
                 r,
-                bytes32(ss & ((1 << 255) - 1))
+                bytes32(yParityAndS & ((1 << 255) - 1))
             );
             require(revoker != address(0));
             uint256 remaining = revokesRemaining[friend];
@@ -495,6 +503,15 @@ contract TCKT is IERC721 {
     function reduceRevokeThreshold(uint256 reduce) external {
         revokesRemaining[msg.sender] -= reduce;
     }
+
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // Price fields and methods
+    //
+    ///////////////////////////////////////////////////////////////////////////
+
+    event PriceChange(address indexed token, uint256 price);
+    mapping(address => uint256) public priceIn;
 
     /**
      * @notice Updates TCKT prices in a given list of tokens.
@@ -547,45 +564,121 @@ contract TCKT is IERC721 {
         }
     }
 
-    function setRevokers(uint256[5] calldata revokers) internal {
-        revokesRemaining[msg.sender] = revokers[0] >> 192;
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // Fields and methods about KimlikDAO protocol validator nodes
+    //
+    ///////////////////////////////////////////////////////////////////////////
 
-        address rev0Addr = address(uint160(revokers[0]));
-        uint256 rev0Weight = (revokers[0] >> 160) & type(uint32).max;
-        require(rev0Addr != address(0) && rev0Addr != msg.sender);
-        revokerWeight[msg.sender][rev0Addr] = rev0Weight;
-        emit RevokerAssignment(msg.sender, rev0Addr, rev0Weight);
+    mapping(address => uint256) public validatorNodeAddresses;
 
-        address rev1Addr = address(uint160(revokers[1]));
-        require(rev1Addr != address(0) && rev1Addr != msg.sender);
-        require(rev1Addr != rev0Addr);
-        revokerWeight[msg.sender][rev1Addr] = revokers[1] >> 160;
-        emit RevokerAssignment(msg.sender, rev1Addr, revokers[1] >> 160);
-
-        address rev2Addr = address(uint160(revokers[2]));
-        require(rev2Addr != address(0) && rev2Addr != msg.sender);
-        require(rev2Addr != rev1Addr && rev2Addr != rev0Addr);
-        revokerWeight[msg.sender][rev2Addr] = revokers[2] >> 160;
-        emit RevokerAssignment(msg.sender, rev2Addr, revokers[2] >> 160);
-
-        address rev3Addr = address(uint160(revokers[3]));
-        if (rev3Addr == address(0)) return;
-        revokerWeight[msg.sender][rev3Addr] = revokers[3] >> 160;
-        emit RevokerAssignment(msg.sender, rev3Addr, revokers[3] >> 160);
-
-        address rev4Addr = address(uint160(revokers[4]));
-        if (rev4Addr == address(0)) return;
-        revokerWeight[msg.sender][rev4Addr] = revokers[4] >> 160;
-        emit RevokerAssignment(msg.sender, rev4Addr, revokers[4] >> 160);
+    /**
+     * Marks a node as a validator as of the current blocktime.
+     *
+     * @param nodeAddr         Address of a node to be added to validator list.
+     */
+    function addValidatorNode(address nodeAddr) external {
+        require(msg.sender == OYLAMA);
+        unchecked {
+            validatorNodeAddresses[nodeAddr] = block.timestamp << 128;
+        }
     }
 
     /**
-     * Move ERC20 tokens sent to this address by accident to `DAO_KASASI`.
+     * Bans a validator as of the current block time.
+     *
+     * @param nodeAddr         Address of the node to be banned from being
+     *                         a validator.
      */
-    function rescueToken(IERC20 token) external {
-        // We restrict this method to `DEV_KASASI` only, as we call a method of
-        // an unkown contract, which could potentially be a security risk.
-        require(msg.sender == DEV_KASASI);
-        token.transfer(DAO_KASASI, token.balanceOf(address(this)));
+    function banValidatorNode(address nodeAddr) external {
+        require(msg.sender == OYLAMA);
+        unchecked {
+            uint256 timestamp = validatorNodeAddresses[nodeAddr];
+            require(uint128(timestamp) == 0);
+            validatorNodeAddresses[nodeAddr] =
+                timestamp |
+                uint128(block.timestamp);
+        }
+    }
+
+    /// @notice When a TCKT holder gets their wallet private key exposed
+    /// they can either revoke their TCKT themselves, or use social revoking.
+    ///
+    /// If they are unable to do either, they need to obtain a new TCKT (to a
+    /// new address), with which they can file an exposure report via the
+    /// `reportExposure()` method. Doing so invalidates all TCKTs they have
+    /// obtained before the timestamp of their most recent TCKT.
+    event ExposureReport(bytes32 indexed exposureReportID, uint256 timestamp);
+
+    /// Maps a `exposureReportID` to a reported exposure timestamp,
+    /// or zero if no exposure has been reported.
+    mapping(bytes32 => uint256) public exposureReported;
+
+    /**
+     * @notice Add a `exposureReportID` to exposed list.
+     *
+     * @param exposureReportID of the person whose wallet keys were exposed.
+     * @param timestamp        of the exposureReportID signatures.
+     * @param r1               ECDSA r value of the first validator signature.
+     * @param yParityAndS1     ECSSA s and v values combined.
+     * @param r2               ECDSA r value of the second validator signature.
+     * @param yParityAndS2     ECSSA s and v values combined.
+     * @param r3               ECDSA r value of the third validator signature.
+     * @param yParityAndS3     ECSSA s and v values combined.
+     */
+    function reportExposure(
+        bytes32 exposureReportID,
+        uint256 timestamp,
+        bytes32 r1,
+        uint256 yParityAndS1,
+        bytes32 r2,
+        uint256 yParityAndS2,
+        bytes32 r3,
+        uint256 yParityAndS3
+    ) external {
+        unchecked {
+            bytes32 digest = keccak256(
+                abi.encodePacked(exposureReportID, timestamp)
+            );
+            address node1 = ecrecover(
+                digest,
+                uint8(yParityAndS1 >> 255) + 27,
+                r1,
+                bytes32(yParityAndS1 & ((1 << 255) - 1))
+            );
+            uint256 ts1 = validatorNodeAddresses[node1];
+            require(
+                ts1 != 0 && (uint128(ts1) == 0 || uint128(ts1) > timestamp)
+            );
+
+            address node2 = ecrecover(
+                digest,
+                uint8(yParityAndS2 >> 255) + 27,
+                r2,
+                bytes32(yParityAndS2 & ((1 << 255) - 1))
+            );
+            uint256 ts2 = validatorNodeAddresses[node2];
+            require(
+                node2 != node1 &&
+                    ts2 != 0 &&
+                    (uint128(ts2) == 0 || uint128(ts2) > timestamp)
+            );
+
+            address node3 = ecrecover(
+                digest,
+                uint8(yParityAndS3 >> 255) + 27,
+                r3,
+                bytes32(yParityAndS3 & ((1 << 255) - 1))
+            );
+            uint256 ts3 = validatorNodeAddresses[node2];
+            require(
+                node3 != node1 &&
+                    node3 != node2 &&
+                    ts3 != 0 &&
+                    (uint128(ts3) == 0 || uint128(ts3) > timestamp)
+            );
+        }
+        exposureReported[exposureReportID] = timestamp;
+        emit ExposureReport(exposureReportID, timestamp);
     }
 }

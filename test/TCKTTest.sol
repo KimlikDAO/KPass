@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.16;
+pragma solidity 0.8.17;
 
 import "contracts/TCKT.sol";
 import "forge-std/Test.sol";
@@ -23,13 +23,13 @@ contract TCKTTest is Test {
             tckt.tokenURI(
                 0x3d5bad4604650569f28733f7ad6ec22835e775a0eb20bfd809d78ed2ae8abe47
             ),
-            "ipfs://QmSUAf9gusxTbZZn5nC7d44kHjfrDeu2gfSY31MRVET28n"
+            "https://ipfs.kimlikdao.org/ipfs/QmSUAf9gusxTbZZn5nC7d44kHjfrDeu2gfSY31MRVET28n"
         );
         assertEq(
             tckt.tokenURI(
                 0xd2abff978646ac494f499e9ecd6873414a0c6105196c8c2580d52769f3fc0523
             ),
-            "ipfs://QmcX2ScFVAVnEHrMk3xuf7HXfiGHzmMqdpAYb37zA5mbFp"
+            "https://ipfs.kimlikdao.org/ipfs/QmcX2ScFVAVnEHrMk3xuf7HXfiGHzmMqdpAYb37zA5mbFp"
         );
     }
 
@@ -224,19 +224,6 @@ contract TCKTTest is Test {
         assertEq(uint128(tckt.priceIn(address(1337))), 17);
     }
 
-    function testAuthenticationReportExposure() public {
-        vm.expectRevert();
-        tckt.reportExposure(bytes32(uint256(123123123)));
-
-        vm.prank(TCKT_2OF2_EXPOSURE_REPORTER);
-        tckt.reportExposure(bytes32(uint256(123123123)));
-
-        assertEq(
-            tckt.exposureReported(bytes32(uint256(123123123))),
-            block.timestamp
-        );
-    }
-
     function testCreate() public {
         vm.prank(OYLAMA);
         tckt.updatePrice(5e16 << 160);
@@ -276,6 +263,7 @@ contract TCKTTest is Test {
         uint256 nonce
     )
         internal
+        view
         returns (
             uint8,
             bytes32,
@@ -373,6 +361,7 @@ contract TCKTTest is Test {
 
     function authorizeCreateFor(uint256 handle)
         public
+        view
         returns (bytes32, uint256)
     {
         bytes32 digest = keccak256(
