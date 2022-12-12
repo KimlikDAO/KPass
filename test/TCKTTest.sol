@@ -213,8 +213,7 @@ contract TCKTTest is Test {
         tckt.updatePrice((15 << 160) | uint160(vm.addr(1)));
         assertEq(uint128(tckt.priceIn(vm.addr(1))), 15);
 
-        uint256[] memory prices = new uint256[](1);
-        prices[0] = (17 << 160) | 1337;
+        uint256[5] memory prices = [(uint256(17) << 160) | 1337, 0, 0, 0, 0];
 
         vm.expectRevert();
         tckt.updatePricesBulk((1 << 128) + 1, prices);
@@ -436,43 +435,6 @@ contract TCKTTest is Test {
         }
     }
 
-    function testAuthenticationValidtorNodes() public {
-        vm.prank(OYLAMA);
-        tckt.addValidatorNode(vm.addr(10));
-
-        vm.expectRevert();
-        tckt.addValidatorNode(vm.addr(11));
-
-        vm.prank(OYLAMA);
-        tckt.banValidatorNode(vm.addr(12));
-
-        vm.expectRevert();
-        tckt.banValidatorNode(vm.addr(13));
-    }
-
-    function testValidatorNodes() public {
-        vm.warp(131);
-        vm.prank(OYLAMA);
-        tckt.addValidatorNode(vm.addr(131150));
-
-        vm.expectRevert();
-        tckt.addValidatorNode(vm.addr(131150));
-
-        vm.warp(150);
-        vm.prank(OYLAMA);
-        tckt.banValidatorNode(vm.addr(131150));
-
-        assertEq(
-            tckt.validatorNodes(vm.addr(131150)),
-            (uint256(131) << 64) + 150
-        );
-
-        vm.warp(160);
-        vm.prank(OYLAMA);
-        vm.expectRevert();
-        tckt.banValidatorNode(vm.addr(131150));
-    }
-
     function signOffExposureReport(
         bytes32 exposureReportID,
         uint64 timestamp,
@@ -483,60 +445,5 @@ contract TCKTTest is Test {
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
         return (r, uint256(s) | ((uint256(v) - 27) << 255));
-    }
-
-    function testReportExposure() public {
-        bytes32 exposureReportID = bytes32(uint256(0xcCc));
-
-        vm.warp(1000);
-        vm.startPrank(OYLAMA);
-        tckt.addValidatorNode(vm.addr(111));
-        tckt.addValidatorNode(vm.addr(222));
-        tckt.addValidatorNode(vm.addr(333));
-        tckt.addValidatorNode(vm.addr(444));
-        tckt.addValidatorNode(vm.addr(555));
-        vm.stopPrank();
-
-        (bytes32 r1, uint256 yParityAndS1) = signOffExposureReport(
-            exposureReportID,
-            1001,
-            111
-        );
-        (bytes32 r2, uint256 yParityAndS2) = signOffExposureReport(
-            exposureReportID,
-            1001,
-            222
-        );
-        (bytes32 r3, uint256 yParityAndS3) = signOffExposureReport(
-            exposureReportID,
-            1001,
-            333
-        );
-        (bytes32 r4, uint256 yParityAndS4) = signOffExposureReport(
-            exposureReportID,
-            1001,
-            444
-        );
-        tckt.reportExposure(
-            exposureReportID,
-            1001,
-            r1,
-            yParityAndS1,
-            r2,
-            yParityAndS2,
-            r3,
-            yParityAndS3
-        );
-        vm.expectRevert();
-        tckt.reportExposure(
-            exposureReportID,
-            1001,
-            r1,
-            yParityAndS1,
-            r2,
-            yParityAndS2,
-            r4,
-            yParityAndS4
-        );
     }
 }

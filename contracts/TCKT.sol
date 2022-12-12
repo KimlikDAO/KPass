@@ -2,25 +2,17 @@
 
 pragma solidity 0.8.17;
 
-import "interfaces/Addresses.sol";
-import "interfaces/IERC20Permit.sol";
-import "interfaces/IERC721.sol";
+import {DAO_KASASI, OYLAMA, TCKT_ADDR, TCKT_SIGNERS} from "interfaces/Addresses.sol";
+import {IERC20, IERC20Permit} from "interfaces/IERC20Permit.sol";
+import {IERC721} from "interfaces/IERC721.sol";
+import {TCKTSigners} from "./TCKTSigners.sol";
 
 /**
  * @title KimlikDAO TCKT contract.
  * @author KimlikDAO
  */
 contract TCKT is IERC721 {
-    event RevokerAssignment(
-        address indexed owner,
-        address indexed revoker,
-        uint256 weight
-    );
-
     mapping(uint256 => uint256) public handleOf;
-    mapping(address => mapping(address => uint256)) public revokerWeight;
-    mapping(address => uint256) public revokesRemaining;
-    uint256 private revokerlessPremium = (3 << 128) | uint256(2);
 
     function name() external pure override returns (string memory) {
         return "KimlikDAO TC Kimlik Tokeni";
@@ -96,7 +88,7 @@ contract TCKT is IERC721 {
     function create(uint256 handle) external payable {
         require(msg.value >= (priceIn[address(0)] >> 128));
         handleOf[uint160(msg.sender)] = handle;
-        emit Transfer(address(this), msg.sender, handle);
+        emit Transfer(TCKT_ADDR, msg.sender, handle);
     }
 
     /**
@@ -108,18 +100,18 @@ contract TCKT is IERC721 {
      * entire native token balance of this contract to `DAO_KASASI` at any
      * time.
      *
-     * Further, KimlikDAO does daily sweeps, again using this method and
+     * Further, KimlikDAO does weekly sweeps, again using this method and
      * covering the gas fee.
      */
     function sweepNativeToken() external {
-        DAO_KASASI.transfer(address(this).balance);
+        DAO_KASASI.transfer(TCKT_ADDR.balance);
     }
 
     /**
-     * Move ERC20 tokens sent to this address by accident to `DAO_KASASI`.
+     * Moves ERC20 tokens sent to this address by accident to `DAO_KASASI`.
      */
     function sweepToken(IERC20 token) external {
-        token.transfer(DAO_KASASI, token.balanceOf(address(this)));
+        token.transfer(DAO_KASASI, token.balanceOf(TCKT_ADDR));
     }
 
     /**
@@ -129,7 +121,9 @@ contract TCKT is IERC721 {
      * @param handle           IPFS handle of the persisted TCKT.
      * @param revokers         A list of pairs (weight, address), bit packed
      *                         into a single word, where the weight is a uint96
-     *                         and the address is 20 bytes.
+     *                         and the address is 20 bytes. Further, the first
+     *                         word contains the revokeThreshold in the
+     *                         leftmost 64 bits.
      */
     function createWithRevokers(uint256 handle, uint256[5] calldata revokers)
         external
@@ -137,7 +131,7 @@ contract TCKT is IERC721 {
     {
         require(msg.value >= uint128(priceIn[address(0)]));
         handleOf[uint160(msg.sender)] = handle;
-        emit Transfer(address(this), msg.sender, handle);
+        emit Transfer(TCKT_ADDR, msg.sender, handle);
         setRevokers(revokers);
     }
 
@@ -150,7 +144,7 @@ contract TCKT is IERC721 {
         require(price > 0);
         token.transferFrom(msg.sender, DAO_KASASI, price);
         handleOf[uint160(msg.sender)] = handle;
-        emit Transfer(address(this), msg.sender, handle);
+        emit Transfer(TCKT_ADDR, msg.sender, handle);
     }
 
     /**
@@ -183,7 +177,7 @@ contract TCKT is IERC721 {
         unchecked {
             token.permit(
                 msg.sender,
-                address(this),
+                TCKT_ADDR,
                 price,
                 deadlineAndToken >> 160,
                 uint8(yParityAndS >> 255) + 27,
@@ -193,7 +187,7 @@ contract TCKT is IERC721 {
         }
         token.transferFrom(msg.sender, DAO_KASASI, price);
         handleOf[uint160(msg.sender)] = handle;
-        emit Transfer(address(this), msg.sender, handle);
+        emit Transfer(TCKT_ADDR, msg.sender, handle);
     }
 
     /**
@@ -212,7 +206,7 @@ contract TCKT is IERC721 {
         require(price > 0);
         token.transferFrom(msg.sender, DAO_KASASI, price);
         handleOf[uint160(msg.sender)] = handle;
-        emit Transfer(address(this), msg.sender, handle);
+        emit Transfer(TCKT_ADDR, msg.sender, handle);
         setRevokers(revokers);
     }
 
@@ -238,7 +232,7 @@ contract TCKT is IERC721 {
         unchecked {
             token.permit(
                 msg.sender,
-                address(this),
+                TCKT_ADDR,
                 price,
                 deadlineAndToken >> 160,
                 uint8(yParityAndS >> 255) + 27,
@@ -248,7 +242,7 @@ contract TCKT is IERC721 {
         }
         token.transferFrom(msg.sender, DAO_KASASI, price);
         handleOf[uint160(msg.sender)] = handle;
-        emit Transfer(address(this), msg.sender, handle);
+        emit Transfer(TCKT_ADDR, msg.sender, handle);
         setRevokers(revokers);
     }
 
@@ -317,7 +311,7 @@ contract TCKT is IERC721 {
             require(signer != address(0) && handleOf[uint160(signer)] == 0);
             token.permit(
                 signer,
-                address(this),
+                TCKT_ADDR,
                 price,
                 deadlineAndToken >> 160,
                 uint8(paymentSS >> 255) + 27,
@@ -326,7 +320,7 @@ contract TCKT is IERC721 {
             );
             token.transferFrom(signer, DAO_KASASI, price);
             handleOf[uint160(signer)] = handle;
-            emit Transfer(address(this), signer, handle);
+            emit Transfer(TCKT_ADDR, signer, handle);
         }
     }
 
@@ -353,8 +347,44 @@ contract TCKT is IERC721 {
             handleOf[docHandle] = prevDoc;
     }
 
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // Revoking related fields and methods
+    //
+    ///////////////////////////////////////////////////////////////////////////
+
+    event RevokerAssignment(
+        address indexed owner,
+        address indexed revoker,
+        uint256 weight
+    );
+
+    // keccak256("RevokeFriendFor(address friend)");
+    bytes32 public constant REVOKE_FRIEND_FOR_TYPEHASH =
+        0xfbf2f0fb915c060d6b3043ea7458b132e0cbcd7973bac5644e78e4f17cd28b8e;
+
+    uint256 private constant REVOKES_REMAINING_MASK =
+        uint256(type(uint64).max) << 192;
+
+    mapping(address => mapping(address => uint256)) public revokerWeight;
+
+    // `revokeInfo` layout:
+    // |-- revokesRemaining --|--   empty   --|-- lastRevokeTimestamp --|
+    // |--        64        --|--    128    --|--          64         --|
+    mapping(address => uint256) public revokeInfo;
+
+    function revokesRemaining() external view returns (uint256) {
+        return revokeInfo[msg.sender] >> 192;
+    }
+
+    function lastRevokeTimestamp(address addr) external view returns (uint64) {
+        return uint64(revokeInfo[addr]);
+    }
+
     function setRevokers(uint256[5] calldata revokers) internal {
-        revokesRemaining[msg.sender] = revokers[0] >> 192;
+        revokeInfo[msg.sender] =
+            (revokeInfo[msg.sender] & type(uint64).max) |
+            (revokers[0] & REVOKES_REMAINING_MASK);
 
         address rev0Addr = address(uint160(revokers[0]));
         uint256 rev0Weight = (revokers[0] >> 160) & type(uint32).max;
@@ -381,18 +411,19 @@ contract TCKT is IERC721 {
 
         address rev4Addr = address(uint160(revokers[4]));
         if (rev4Addr == address(0)) return;
-        revokerWeight[msg.sender][rev4Addr] = revokers[4] >> 160;
+        revokerWeight[msg.sender][rev4Addr] = revokers[4] << 160;
         emit RevokerAssignment(msg.sender, rev4Addr, revokers[4] >> 160);
     }
 
     /**
      * @notice Revokes users own TCKT.
      *
-     * The user has the right to delete their own TCKT any time they want using
-     * this method.
+     * The user has the right to delete their own TCKT at any time using this
+     * method.
      */
     function revoke() external {
-        emit Transfer(msg.sender, address(this), handleOf[uint160(msg.sender)]);
+        emit Transfer(msg.sender, TCKT_ADDR, handleOf[uint160(msg.sender)]);
+        revokeInfo[msg.sender] = block.timestamp;
         delete handleOf[uint160(msg.sender)];
     }
 
@@ -406,15 +437,15 @@ contract TCKT is IERC721 {
      * @param friend           The wallet address of a friends TCKT.
      */
     function revokeFriend(address friend) external {
-        uint256 remaining = revokesRemaining[friend];
-        uint256 senderWeight = revokerWeight[friend][msg.sender];
+        uint256 revInfo = revokeInfo[friend];
+        uint256 senderWeight = revokerWeight[friend][msg.sender] << 192;
 
         require(senderWeight > 0);
         delete revokerWeight[friend][msg.sender];
 
         unchecked {
-            if (senderWeight >= remaining) {
-                delete revokesRemaining[friend];
+            if (senderWeight >= (revInfo & REVOKES_REMAINING_MASK)) {
+                revokeInfo[friend] = block.timestamp;
                 if (handleOf[uint160(friend)] != 0) {
                     emit Transfer(
                         friend,
@@ -423,13 +454,9 @@ contract TCKT is IERC721 {
                     );
                     delete handleOf[uint160(friend)];
                 }
-            } else revokesRemaining[friend] = remaining - senderWeight;
+            } else revokeInfo[friend] = revInfo - senderWeight;
         }
     }
-
-    // keccak256("RevokeFriendFor(address friend)");
-    bytes32 public constant REVOKE_FRIEND_FOR_TYPEHASH =
-        0xfbf2f0fb915c060d6b3043ea7458b132e0cbcd7973bac5644e78e4f17cd28b8e;
 
     /**
      * Cast a social revoke vote by signature.
@@ -463,22 +490,18 @@ contract TCKT is IERC721 {
                 bytes32(yParityAndS & ((1 << 255) - 1))
             );
             require(revoker != address(0));
-            uint256 remaining = revokesRemaining[friend];
-            uint256 revokerW = revokerWeight[friend][revoker];
+            uint256 revInfo = revokeInfo[friend];
+            uint256 revokerW = revokerWeight[friend][revoker] << 192;
             require(revokerW > 0);
             delete revokerWeight[friend][revoker];
 
-            if (revokerW >= remaining) {
-                delete revokesRemaining[friend];
+            if (revokerW >= (revInfo & REVOKES_REMAINING_MASK)) {
+                revokeInfo[friend] = block.timestamp;
                 if (handleOf[uint160(friend)] != 0) {
-                    emit Transfer(
-                        friend,
-                        address(this),
-                        handleOf[uint160(friend)]
-                    );
+                    emit Transfer(friend, TCKT_ADDR, handleOf[uint160(friend)]);
                     delete handleOf[uint160(friend)];
                 }
-            } else revokesRemaining[friend] = remaining - revokerW;
+            } else revokeInfo[friend] = revInfo - revokerW;
         }
     }
 
@@ -501,7 +524,8 @@ contract TCKT is IERC721 {
      * @param reduce           The amount to reduce.
      */
     function reduceRevokeThreshold(uint256 reduce) external {
-        revokesRemaining[msg.sender] -= reduce;
+        uint256 threshold = revokeInfo[msg.sender] >> 192;
+        revokeInfo[msg.sender] = (threshold - reduce) << 192; // Checked substraction
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -511,6 +535,11 @@ contract TCKT is IERC721 {
     ///////////////////////////////////////////////////////////////////////////
 
     event PriceChange(address indexed token, uint256 price);
+
+    /// The multiplicative premium for getting a TCKT wihout setting up social
+    /// revoke. The initial value is 3/2, and adjusted by DAO vote.
+    uint256 private revokerlessPremium = (3 << 128) | uint256(2);
+
     mapping(address => uint256) public priceIn;
 
     /**
@@ -526,15 +555,14 @@ contract TCKT is IERC721 {
      *                         bits, the `updatePrice()` method should be used
      *                         instead.
      */
-    function updatePricesBulk(uint256 premium, uint256[] calldata prices)
+    function updatePricesBulk(uint256 premium, uint256[5] calldata prices)
         external
     {
         require(msg.sender == OYLAMA);
         unchecked {
             revokerlessPremium = premium;
-            for (uint256 i = 0; i < prices.length; ++i) {
-                // We avoid calling `updatePrice()` so as not to read
-                // `revokerlessPremium` from storage.
+            for (uint256 i = 0; i < 5; ++i) {
+                if (prices[i] == 0) break;
                 address token = address(uint160(prices[i]));
                 uint256 price = prices[i] >> 160;
                 uint256 t = (price * premium) / uint128(premium);
@@ -566,39 +594,9 @@ contract TCKT is IERC721 {
 
     ///////////////////////////////////////////////////////////////////////////
     //
-    // Fields and methods about KimlikDAO protocol validator nodes
+    // Exposure report related fields and methods
     //
     ///////////////////////////////////////////////////////////////////////////
-
-    mapping(address => uint256) public validatorNodes;
-
-    /**
-     * Marks a node as a validator as of the current blocktime.
-     *
-     * @param nodeAddr         Address of a node to be added to validator list.
-     */
-    function addValidatorNode(address nodeAddr) external {
-        require(msg.sender == OYLAMA);
-        unchecked {
-            require(validatorNodes[nodeAddr] == 0);
-            validatorNodes[nodeAddr] = block.timestamp << 64;
-        }
-    }
-
-    /**
-     * Bans a validator as of the current block time.
-     *
-     * @param nodeAddr         Address of the node to be banned from being
-     *                         a validator.
-     */
-    function banValidatorNode(address nodeAddr) external {
-        require(msg.sender == OYLAMA);
-        unchecked {
-            uint256 timestamp = validatorNodes[nodeAddr];
-            require(uint64(timestamp) == 0);
-            validatorNodes[nodeAddr] = timestamp | uint64(block.timestamp);
-        }
-    }
 
     /// @notice When a TCKT holder gets their wallet private key exposed
     /// they can either revoke their TCKT themselves, or use social revoking.
@@ -647,7 +645,7 @@ contract TCKT is IERC721 {
                 r1,
                 bytes32(yParityAndS1 & ((1 << 255) - 1))
             );
-            uint256 ts1 = validatorNodes[node1];
+            uint256 ts1 = TCKTSigners(TCKT_SIGNERS).signerInfo(node1);
             require(ts1 != 0 && (uint64(ts1) == 0 || uint64(ts1) > timestamp));
 
             address node2 = ecrecover(
@@ -656,7 +654,7 @@ contract TCKT is IERC721 {
                 r2,
                 bytes32(yParityAndS2 & ((1 << 255) - 1))
             );
-            uint256 ts2 = validatorNodes[node2];
+            uint256 ts2 = TCKTSigners(TCKT_SIGNERS).signerInfo(node2);
             require(
                 node2 != node1 &&
                     ts2 != 0 &&
@@ -669,7 +667,7 @@ contract TCKT is IERC721 {
                 r3,
                 bytes32(yParityAndS3 & ((1 << 255) - 1))
             );
-            uint256 ts3 = validatorNodes[node2];
+            uint256 ts3 = TCKTSigners(TCKT_SIGNERS).signerInfo(node2);
             require(
                 node3 != node1 &&
                     node3 != node2 &&
