@@ -2,10 +2,10 @@
 
 pragma solidity 0.8.17;
 
-import {DAO_KASASI, OYLAMA, TCKT_ADDR, TCKT_SIGNERS} from "interfaces/Addresses.sol";
+import {DAO_KASASI, OYLAMA, TCKT_SIGNERS} from "interfaces/Addresses.sol";
+import {IDIDSigners} from "./IDIDSigners.sol";
 import {IERC20, IERC20Permit} from "interfaces/IERC20Permit.sol";
 import {IERC721} from "interfaces/IERC721.sol";
-import {TCKTSigners} from "./TCKTSigners.sol";
 
 /**
  * @title KimlikDAO TCKT contract.
@@ -88,7 +88,7 @@ contract TCKT is IERC721 {
     function create(uint256 handle) external payable {
         require(msg.value >= (priceIn[address(0)] >> 128));
         handleOf[uint160(msg.sender)] = handle;
-        emit Transfer(TCKT_ADDR, msg.sender, handle);
+        emit Transfer(address(this), msg.sender, handle);
     }
 
     /**
@@ -104,14 +104,14 @@ contract TCKT is IERC721 {
      * covering the gas fee.
      */
     function sweepNativeToken() external {
-        DAO_KASASI.transfer(TCKT_ADDR.balance);
+        DAO_KASASI.transfer(address(this).balance);
     }
 
     /**
      * Moves ERC20 tokens sent to this address by accident to `DAO_KASASI`.
      */
     function sweepToken(IERC20 token) external {
-        token.transfer(DAO_KASASI, token.balanceOf(TCKT_ADDR));
+        token.transfer(DAO_KASASI, token.balanceOf(address(this)));
     }
 
     /**
@@ -131,7 +131,7 @@ contract TCKT is IERC721 {
     {
         require(msg.value >= uint128(priceIn[address(0)]));
         handleOf[uint160(msg.sender)] = handle;
-        emit Transfer(TCKT_ADDR, msg.sender, handle);
+        emit Transfer(address(this), msg.sender, handle);
         setRevokers(revokers);
     }
 
@@ -144,7 +144,7 @@ contract TCKT is IERC721 {
         require(price > 0);
         token.transferFrom(msg.sender, DAO_KASASI, price);
         handleOf[uint160(msg.sender)] = handle;
-        emit Transfer(TCKT_ADDR, msg.sender, handle);
+        emit Transfer(address(this), msg.sender, handle);
     }
 
     /**
@@ -177,7 +177,7 @@ contract TCKT is IERC721 {
         unchecked {
             token.permit(
                 msg.sender,
-                TCKT_ADDR,
+                address(this),
                 price,
                 deadlineAndToken >> 160,
                 uint8(yParityAndS >> 255) + 27,
@@ -187,7 +187,7 @@ contract TCKT is IERC721 {
         }
         token.transferFrom(msg.sender, DAO_KASASI, price);
         handleOf[uint160(msg.sender)] = handle;
-        emit Transfer(TCKT_ADDR, msg.sender, handle);
+        emit Transfer(address(this), msg.sender, handle);
     }
 
     /**
@@ -206,7 +206,7 @@ contract TCKT is IERC721 {
         require(price > 0);
         token.transferFrom(msg.sender, DAO_KASASI, price);
         handleOf[uint160(msg.sender)] = handle;
-        emit Transfer(TCKT_ADDR, msg.sender, handle);
+        emit Transfer(address(this), msg.sender, handle);
         setRevokers(revokers);
     }
 
@@ -232,7 +232,7 @@ contract TCKT is IERC721 {
         unchecked {
             token.permit(
                 msg.sender,
-                TCKT_ADDR,
+                address(this),
                 price,
                 deadlineAndToken >> 160,
                 uint8(yParityAndS >> 255) + 27,
@@ -242,7 +242,7 @@ contract TCKT is IERC721 {
         }
         token.transferFrom(msg.sender, DAO_KASASI, price);
         handleOf[uint160(msg.sender)] = handle;
-        emit Transfer(TCKT_ADDR, msg.sender, handle);
+        emit Transfer(address(this), msg.sender, handle);
         setRevokers(revokers);
     }
 
@@ -254,7 +254,7 @@ contract TCKT is IERC721 {
     //         keccak256(bytes("TCKT")),
     //         keccak256(bytes("1")),
     //         43114,
-    //         TCKT_ADDR
+    //         address(this)
     //     )
     // );
     bytes32 public constant DOMAIN_SEPARATOR =
@@ -311,7 +311,7 @@ contract TCKT is IERC721 {
             require(signer != address(0) && handleOf[uint160(signer)] == 0);
             token.permit(
                 signer,
-                TCKT_ADDR,
+                address(this),
                 price,
                 deadlineAndToken >> 160,
                 uint8(paymentSS >> 255) + 27,
@@ -320,7 +320,7 @@ contract TCKT is IERC721 {
             );
             token.transferFrom(signer, DAO_KASASI, price);
             handleOf[uint160(signer)] = handle;
-            emit Transfer(TCKT_ADDR, signer, handle);
+            emit Transfer(address(this), signer, handle);
         }
     }
 
@@ -422,7 +422,7 @@ contract TCKT is IERC721 {
      * method.
      */
     function revoke() external {
-        emit Transfer(msg.sender, TCKT_ADDR, handleOf[uint160(msg.sender)]);
+        emit Transfer(msg.sender, address(this), handleOf[uint160(msg.sender)]);
         revokeInfo[msg.sender] = block.timestamp;
         delete handleOf[uint160(msg.sender)];
     }
@@ -498,7 +498,11 @@ contract TCKT is IERC721 {
             if (revokerW >= (revInfo & REVOKES_REMAINING_MASK)) {
                 revokeInfo[friend] = block.timestamp;
                 if (handleOf[uint160(friend)] != 0) {
-                    emit Transfer(friend, TCKT_ADDR, handleOf[uint160(friend)]);
+                    emit Transfer(
+                        friend,
+                        address(this),
+                        handleOf[uint160(friend)]
+                    );
                     delete handleOf[uint160(friend)];
                 }
             } else revokeInfo[friend] = revInfo - revokerW;
@@ -618,61 +622,39 @@ contract TCKT is IERC721 {
      *
      * @param exposureReportID of the person whose wallet keys were exposed.
      * @param timestamp        of the exposureReportID signatures.
-     * @param r1               ECDSA r value of the first validator signature.
-     * @param yParityAndS1     ECSSA s and v values combined.
-     * @param r2               ECDSA r value of the second validator signature.
-     * @param yParityAndS2     ECSSA s and v values combined.
-     * @param r3               ECDSA r value of the third validator signature.
-     * @param yParityAndS3     ECSSA s and v values combined.
+     * @param r                ECDSA r value of the validator signatures.
+     * @param yParityAndS      ECSSA s and v values combined.
      */
     function reportExposure(
         bytes32 exposureReportID,
         uint64 timestamp,
-        bytes32 r1,
-        uint256 yParityAndS1,
-        bytes32 r2,
-        uint256 yParityAndS2,
-        bytes32 r3,
-        uint256 yParityAndS3
+        bytes32[3] calldata r,
+        uint256[3] calldata yParityAndS
     ) external {
         unchecked {
             bytes32 digest = keccak256(
                 abi.encodePacked(exposureReportID, timestamp)
             );
-            address node1 = ecrecover(
-                digest,
-                uint8(yParityAndS1 >> 255) + 27,
-                r1,
-                bytes32(yParityAndS1 & ((1 << 255) - 1))
-            );
-            uint256 ts1 = TCKTSigners(TCKT_SIGNERS).signerInfo(node1);
-            require(ts1 != 0 && (uint64(ts1) == 0 || uint64(ts1) > timestamp));
-
-            address node2 = ecrecover(
-                digest,
-                uint8(yParityAndS2 >> 255) + 27,
-                r2,
-                bytes32(yParityAndS2 & ((1 << 255) - 1))
-            );
-            uint256 ts2 = TCKTSigners(TCKT_SIGNERS).signerInfo(node2);
+            address[3] memory nodes;
+            for (uint256 i = 0; i < 3; ++i) {
+                nodes[i] = ecrecover(
+                    digest,
+                    uint8(yParityAndS[i] >> 255) + 27,
+                    r[i],
+                    bytes32(yParityAndS[i] & ((1 << 255) - 1))
+                );
+                uint256 info = IDIDSigners(TCKT_SIGNERS).signerInfo(nodes[i]);
+                uint256 endTs = uint64(info >> 128);
+                require(
+                    info != 0 &&
+                        uint64(info >> 64) <= timestamp &&
+                        (endTs == 0 || timestamp < endTs)
+                );
+            }
             require(
-                node2 != node1 &&
-                    ts2 != 0 &&
-                    (uint64(ts2) == 0 || uint64(ts2) > timestamp)
-            );
-
-            address node3 = ecrecover(
-                digest,
-                uint8(yParityAndS3 >> 255) + 27,
-                r3,
-                bytes32(yParityAndS3 & ((1 << 255) - 1))
-            );
-            uint256 ts3 = TCKTSigners(TCKT_SIGNERS).signerInfo(node2);
-            require(
-                node3 != node1 &&
-                    node3 != node2 &&
-                    ts3 != 0 &&
-                    (uint64(ts3) == 0 || uint64(ts3) > timestamp)
+                nodes[0] != nodes[1] &&
+                    nodes[0] != nodes[2] &&
+                    nodes[1] != nodes[2]
             );
         }
         // Exposure report timestamp can only be incremented.
