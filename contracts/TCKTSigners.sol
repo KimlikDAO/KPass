@@ -5,6 +5,7 @@ pragma solidity 0.8.17;
 import {DEPOSIT_MASK, END_TS_MASK, IDIDSigners} from "./IDIDSigners.sol";
 import {IERC20} from "interfaces/IERC20.sol";
 import {OYLAMA, TCKO_ADDR} from "interfaces/Addresses.sol";
+import {StakedIERC20} from "./StakedIERC20.sol";
 
 /**
  * The contract by which KimlikDAO (i.e., TCKO holders) manage signer nodes.
@@ -31,20 +32,17 @@ import {OYLAMA, TCKO_ADDR} from "interfaces/Addresses.sol";
  *
  * @author KimlikDAO
  */
-contract TCKTSigners is IDIDSigners {
+contract TCKTSigners is IDIDSigners, StakedIERC20 {
     event SignerNodeJoin(address indexed signer, uint256 timestamp);
     event SignerNodeLeave(address indexed signer, uint256 timestamp);
-    event SignerNodeSlash(
-        address indexed signer,
-        uint256 slashedAmount,
-        uint256 timestamp
-    );
+    event SignerNodeSlash(address indexed signer, uint256 slashedAmount);
     event StakingDepositChange(uint48 stakeAmount);
+    event SignersNeededChange(uint256 signersCount);
 
     /**
      * The amount of TCKTs a node must stake before they can be voted as a
      * signer node. Note approving this amount for staking is a necessary first
-     * step to be a signer, but nearly sufficient.
+     * step to be a signer, but not nearly sufficient.
      *
      * The initial value is 1M TCKOs and the value is determined by DAO vote
      * thereafter via the `setStakingDeposit()` method.
@@ -52,19 +50,135 @@ contract TCKTSigners is IDIDSigners {
     uint256 public stakingDeposit = 1e12;
 
     /**
-     * The total TCKOs of this contract minus the debt to be returned to the
-     * signer nodes.
-     *
-     * The excess increases as signers get slashed and decreases as signers
-     * unstake and collect their share of the excess.
+     * The minimum number of valid signer node signatures needed for a
+     * validator to consider an `InfoSection` as valid.
      */
-    uint256 public totalExcess;
-
-    mapping(address => uint256) public override signerInfo;
+    uint256 public signersNeeded = 1;
 
     /**
-     * Sets the TCKO amount required to be eligible to become a signer node.
-     * Can only be set by `OYLAMA`.
+     * Maps a slashing event number to a bitpacked struct.
+     *
+     * cumRate: How many TCKOs may be withdrawn for every 2^128 TCKOs staked at
+     *          the very beginning of this contract. While this tracks the
+     *          cumulative rate for the initial signers, any other signer's
+     *          cumulative rate can be calculated as a difference of two
+     *          cumRate's. See `balanceOf()`.
+     * timestamp: The block.timestamp of the block where the slashing occurred
+     *
+     * |--  cumRate --|---- timestamp ----|
+     * |--    192   --|----    64     ----|
+     *
+     */
+    mapping(uint256 => uint256) private jointDeposits;
+
+    /**
+     * The number of times `jointDeposit()` has been called, thereby giving
+     * TCKOs to active signers proportinal to their TCKO-st stake.
+     */
+    uint256 private jointDepositCount;
+
+    /**
+     * Maps and evm address to the signerInfo struct. See `IDIDSigners`.
+     */
+    mapping(address => uint256) public override signerInfo;
+
+    uint256 private balancePendingWithdrawal;
+
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // TCKO-st token interface
+    //
+    ///////////////////////////////////////////////////////////////////////////
+
+    function name() external pure override returns (string memory) {
+        return "Staked TCKO";
+    }
+
+    function symbol() external pure override returns (string memory) {
+        return "TCKO-st";
+    }
+
+    function decimals() external pure override returns (uint8) {
+        return 6;
+    }
+
+    function totalSupply() external view override returns (uint256) {
+        return IERC20(TCKO_ADDR).balanceOf(address(this));
+    }
+
+    /**
+     * Returns the TCKO-st balance of a given address.
+     *
+     * Note the balance of an account may increase without ever a `Transfer`
+     * event firing for this account. This happens after a `jointDeposit()`,
+     * which in turn may happen due a slashed signer or someone donating TCKOs
+     * to all active signers (donated TCKOs turn into TCKO-st automatically).
+     *
+     * @param addr Address of the account whose balance is queried.
+     * @return The amount of TCKO-st tokens the address have.
+     */
+    function balanceOf(address addr) public view returns (uint256) {
+        uint256 info = signerInfo[addr];
+        uint256 startTs = uint64(info);
+        uint256 n = jointDepositCount;
+        uint256 r = n;
+
+        for (uint256 l = 0; l < r; ) {
+            uint256 m = r - ((r - l) >> 1);
+            if (uint64(jointDeposits[m]) > startTs) r = m - 1;
+            else l = m;
+        }
+        // Here we are using the fact that
+        //   n > r => jointDeposits[n].timestamp > jointDeposits[r].timestamp
+        return
+            (uint64(info >> 64) *
+                ((1 << 128) + ((jointDeposits[n] - jointDeposits[r]) >> 64))) >>
+            128;
+    }
+
+    /**
+     * The amount of TCKOs a signer initially deposited.
+     *
+     * Note depending of the status of the signer, these TCKOs may have been
+     * withdrawn, increased or even completely slashed.
+     *
+     * @param addr A signer node address
+     * @return The amount of TCKOs the signer deposited.
+     */
+    function depositBalanceOf(address addr) external view returns (uint256) {
+        return uint64(signerInfo[addr] >> 64);
+    }
+
+    /**
+     * Deposits an amount of TCKOs to each signer proportional to their stake.
+     *
+     * The sender must have approved this amount of TCKOs for use by the
+     * TCKTSigners contract beforehand.
+     *
+     * @param amount The amount to deposit to signers
+     */
+    function jointDeposit(uint256 amount) external {
+        uint256 totalStake = IERC20(TCKO_ADDR).balanceOf(address(this)) -
+            balancePendingWithdrawal;
+        IERC20(TCKO_ADDR).transferFrom(msg.sender, address(this), amount);
+        uint256 n = jointDepositCount;
+        uint256 cumRate = jointDeposits[n] >> 64;
+        jointDeposits[n + 1] =
+            ((((amount << 128) / totalStake) + cumRate) << 64) |
+            block.timestamp;
+        jointDepositCount = n + 1;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // Parameters to be adjusted by the DAO vote.
+    //
+    ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * Sets the TCKO amount required to qualify for the signer selection.
+     *
+     * Can only be set by the DAO vote, that is, the `OYLAMA` contract.
      *
      * Note the existing signers are not affected by a stakingDeposit change;
      * only the new signers are subjected to the new staking amount.
@@ -76,6 +190,26 @@ contract TCKTSigners is IDIDSigners {
         stakingDeposit = stakeAmount;
         emit StakingDepositChange(stakeAmount);
     }
+
+    /**
+     * Sets the number of valid signatures needed before an `InfoSection` is
+     * deemed valid by the validators.
+     *
+     * Can only be set by the DAO vote, that is, the `OYLAMA` contract.
+     *
+     * @param signersCount the amount of valid signatures needed.
+     */
+    function setSignersNeeded(uint256 signersCount) external {
+        require(msg.sender == OYLAMA);
+        signersNeeded = signersCount;
+        emit SignersNeededChange(signersCount);
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // Signer node management functionality.
+    //
+    ///////////////////////////////////////////////////////////////////////////
 
     /**
      * Marks a node as a validator as of the current blocktime, collecting
@@ -96,6 +230,7 @@ contract TCKTSigners is IDIDSigners {
             signerInfo[addr] = (stakeAmount << 64) | block.timestamp;
         }
         emit SignerNodeJoin(addr, block.timestamp);
+        emit Transfer(address(this), addr, stakeAmount);
     }
 
     /**
@@ -113,9 +248,8 @@ contract TCKTSigners is IDIDSigners {
         // Ensure that `state(msg.sender) == S`.
         require(info != 0 && (info & END_TS_MASK == 0));
         unchecked {
-            uint256 totalStaked = IERC20(TCKO_ADDR).balanceOf(address(this));
-            uint256 toWithdraw = (uint64(info >> 64) * totalStaked) /
-                (totalStaked - totalExcess);
+            uint256 toWithdraw = balanceOf(msg.sender);
+            balancePendingWithdrawal += toWithdraw;
             signerInfo[msg.sender] =
                 (toWithdraw << 192) |
                 (block.timestamp << 128) |
@@ -139,11 +273,10 @@ contract TCKTSigners is IDIDSigners {
             // Ensure `state(msg.sender) == U`
             require(toWithdraw != 0 && endTs != 0);
             require(block.timestamp > endTs + 30 days);
-            uint256 stakeAmount = uint64(info >> 64);
             signerInfo[msg.sender] = uint192(info);
-            if (toWithdraw > stakeAmount)
-                totalExcess -= toWithdraw - stakeAmount;
+            balancePendingWithdrawal -= toWithdraw;
             IERC20(TCKO_ADDR).transfer(msg.sender, toWithdraw);
+            emit Transfer(msg.sender, address(this), toWithdraw);
         }
     }
 
@@ -160,8 +293,18 @@ contract TCKTSigners is IDIDSigners {
         require(msg.sender == OYLAMA);
         unchecked {
             uint256 info = signerInfo[addr];
-            uint256 stakeAmount = uint64(info >> 64);
-
+            uint256 slashAmount = balanceOf(addr);
+            uint256 remainingStake = IERC20(TCKO_ADDR).balanceOf(
+                address(this)
+            ) -
+                balancePendingWithdrawal -
+                slashAmount;
+            uint256 n = jointDepositCount;
+            uint256 cumRate = jointDeposits[n] >> 64;
+            jointDeposits[n + 1] =
+                ((((slashAmount << 128) / remainingStake) + cumRate) << 64) |
+                block.timestamp;
+            jointDepositCount = n + 1;
             // The case `state(addr) == S`
             if (info & END_TS_MASK == 0) {
                 signerInfo[addr] = (block.timestamp << 128) | info;
@@ -170,9 +313,9 @@ contract TCKTSigners is IDIDSigners {
                 require(info >> 192 != 0);
                 signerInfo[addr] = uint192(info); // Zero-out toWithdraw
             }
-            totalExcess += stakeAmount;
-            emit SignerNodeSlash(addr, stakeAmount, block.timestamp);
+            emit SignerNodeSlash(addr, slashAmount);
             emit SignerNodeLeave(addr, block.timestamp);
+            emit Transfer(addr, address(this), slashAmount);
         }
     }
 }
