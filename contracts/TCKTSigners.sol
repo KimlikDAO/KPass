@@ -52,7 +52,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * The minimum number of valid signer node signatures needed for a
      * validator to consider an `InfoSection` as valid.
      */
-    uint256 public signersNeeded = 1;
+    uint256 public signersNeeded = 3;
 
     /**
      * Maps a slashing event number to a bitpacked struct.
@@ -121,23 +121,26 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      */
     function balanceOf(address addr) public view returns (uint256) {
         uint256 info = signerInfo[addr];
-        if (info & END_TS_MASK != 0) return info >> 192;
-        uint256 startTs = uint64(info);
-        uint256 n = jointDepositCount;
-        uint256 r = n;
+        unchecked {
+            if (info & END_TS_MASK != 0) return info >> 192;
+            uint256 startTs = uint64(info);
+            uint256 n = jointDepositCount;
+            uint256 r = n;
 
-        for (uint256 l = 0; l < r; ) {
-            uint256 m = r - ((r - l) >> 1);
-            if (uint64(jointDeposits[m]) > startTs) r = m - 1;
-            else l = m;
+            for (uint256 l = 0; l < r; ) {
+                uint256 m = r - ((r - l) >> 1);
+                if (uint64(jointDeposits[m]) > startTs) r = m - 1;
+                else l = m;
+            }
+            // Here we are using the fact that
+            //   n > r => jointDeposits[n].timestamp > jointDeposits[r].timestamp
+            uint256 cumulativeRate = r == 0
+                ? jointDeposits[n]
+                : jointDeposits[n] - jointDeposits[r];
+            return
+                (uint64(info >> 64) * ((1 << 128) + (cumulativeRate >> 64))) >>
+                128;
         }
-        // Here we are using the fact that
-        //   n > r => jointDeposits[n].timestamp > jointDeposits[r].timestamp
-        uint256 cumulativeRate = r == 0
-            ? jointDeposits[n]
-            : jointDeposits[n] - jointDeposits[r];
-        return
-            (uint64(info >> 64) * ((1 << 128) + (cumulativeRate >> 64))) >> 128;
     }
 
     /**
@@ -189,12 +192,14 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      */
     function jointDeposit(uint256 amount) external {
         IERC20(TCKO_ADDR).transferFrom(msg.sender, address(this), amount);
-        uint256 n = jointDepositCount;
-        uint256 cumRate = jointDeposits[n] >> 64;
-        jointDeposits[n + 1] =
-            ((((amount << 128) / signerDepositBalance) + cumRate) << 64) |
-            block.timestamp;
-        jointDepositCount = n + 1;
+        unchecked {
+            uint256 n = jointDepositCount;
+            uint256 cumRate = jointDeposits[n] >> 64;
+            jointDeposits[n + 1] =
+                ((((amount << 128) / signerDepositBalance) + cumRate) << 64) |
+                block.timestamp;
+            jointDepositCount = n + 1;
+        }
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -253,9 +258,9 @@ contract TCKTSigners is IDIDSigners, IERC20 {
         // Ensure that `state(addr) == O`.
         require(signerInfo[addr] == 0);
         uint256 stakeAmount = stakingDeposit;
-        signerDepositBalance += stakeAmount;
         IERC20(TCKO_ADDR).transferFrom(addr, address(this), stakeAmount);
         unchecked {
+            signerDepositBalance += stakeAmount;
             signerInfo[addr] = (stakeAmount << 64) | block.timestamp;
         }
         emit SignerNodeJoin(addr, block.timestamp);
@@ -320,8 +325,8 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      */
     function slashSignerNode(address addr) external {
         require(msg.sender == OYLAMA);
+        uint256 info = signerInfo[addr];
         unchecked {
-            uint256 info = signerInfo[addr];
             uint256 slashAmount = balanceOf(addr);
             uint256 signerBalanceLeft = signerDepositBalance -
                 uint64(info >> 64);
