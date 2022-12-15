@@ -7,9 +7,9 @@ import { parse } from "toml";
  * @param {string} file
  * @param {string} chainId
  */
-const processTCKT = (file, chainId) => {
-  return file;
-}
+const processTCKT = (file, chainId) => chainId == "0xa86a"
+  ? file
+  : file.slice(0, file.indexOf("// Exposure report") - 92) + "}";
 
 /**
  * @param {Array<string>} sourceNames
@@ -68,9 +68,10 @@ const deployToChain = (chainId, signer) => {
     }
   }
   const factory = new ethers.ContractFactory(TCKT.abi, TCKT.evm.bytecode.object);
+  console.log(factory);
 }
 
 const Foundry = parse(readFileSync("foundry.toml")).profile.default;
 
 // new ethers.Wallet(process.argv[2])
-deployToChain("0xa86a", null);
+deployToChain("0x1", null);
