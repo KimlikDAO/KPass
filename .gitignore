@@ -1,4 +1,6 @@
 .DS_Store
-.vscode/
-cache/
-out/
+/.vscode
+/cache
+/node_modules
+/out
+*.lock

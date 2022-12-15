@@ -1,0 +1,6 @@
+{
+  "type": "module",
+  "devDependencies": {
+    "solc": "^0.8.17"
+  }
+}
