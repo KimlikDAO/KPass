@@ -2,10 +2,9 @@
 
 pragma solidity 0.8.17;
 
-import {DEPOSIT_MASK, END_TS_MASK, IDIDSigners} from "./IDIDSigners.sol";
+import {END_TS_MASK, IDIDSigners} from "./IDIDSigners.sol";
 import {IERC20} from "interfaces/IERC20.sol";
 import {OYLAMA, TCKO_ADDR} from "interfaces/Addresses.sol";
-import {StakedIERC20} from "./StakedIERC20.sol";
 
 /**
  * The contract by which KimlikDAO (i.e., TCKO holders) manage signer nodes.
@@ -32,7 +31,7 @@ import {StakedIERC20} from "./StakedIERC20.sol";
  *
  * @author KimlikDAO
  */
-contract TCKTSigners is IDIDSigners, StakedIERC20 {
+contract TCKTSigners is IDIDSigners, IERC20 {
     event SignerNodeJoin(address indexed signer, uint256 timestamp);
     event SignerNodeLeave(address indexed signer, uint256 timestamp);
     event SignerNodeSlash(address indexed signer, uint256 slashedAmount);
@@ -82,7 +81,10 @@ contract TCKTSigners is IDIDSigners, StakedIERC20 {
      */
     mapping(address => uint256) public override signerInfo;
 
-    uint256 private balancePendingWithdrawal;
+    /**
+     * Sum of initial deposits of active signers.
+     */
+    uint256 private signerDepositBalance;
 
     ///////////////////////////////////////////////////////////////////////////
     //
@@ -119,6 +121,7 @@ contract TCKTSigners is IDIDSigners, StakedIERC20 {
      */
     function balanceOf(address addr) public view returns (uint256) {
         uint256 info = signerInfo[addr];
+        if (info & END_TS_MASK != 0) return info >> 192;
         uint256 startTs = uint64(info);
         uint256 n = jointDepositCount;
         uint256 r = n;
@@ -130,10 +133,11 @@ contract TCKTSigners is IDIDSigners, StakedIERC20 {
         }
         // Here we are using the fact that
         //   n > r => jointDeposits[n].timestamp > jointDeposits[r].timestamp
+        uint256 cumulativeRate = r == 0
+            ? jointDeposits[n]
+            : jointDeposits[n] - jointDeposits[r];
         return
-            (uint64(info >> 64) *
-                ((1 << 128) + ((jointDeposits[n] - jointDeposits[r]) >> 64))) >>
-            128;
+            (uint64(info >> 64) * ((1 << 128) + (cumulativeRate >> 64))) >> 128;
     }
 
     /**
@@ -149,8 +153,34 @@ contract TCKTSigners is IDIDSigners, StakedIERC20 {
         return uint64(signerInfo[addr] >> 64);
     }
 
+    function transfer(address, uint256) external pure override returns (bool) {
+        return false;
+    }
+
+    function transferFrom(
+        address,
+        address,
+        uint256
+    ) external pure override returns (bool) {
+        return false;
+    }
+
+    function allowance(address, address)
+        external
+        pure
+        override
+        returns (uint256)
+    {
+        return 0;
+    }
+
+    function approve(address, uint256) external pure override returns (bool) {
+        return false;
+    }
+
     /**
-     * Deposits an amount of TCKOs to each signer proportional to their stake.
+     * Deposits an amount of TCKOs to each signer proportional to their initial
+     * TCKO contribution.
      *
      * The sender must have approved this amount of TCKOs for use by the
      * TCKTSigners contract beforehand.
@@ -158,13 +188,11 @@ contract TCKTSigners is IDIDSigners, StakedIERC20 {
      * @param amount The amount to deposit to signers
      */
     function jointDeposit(uint256 amount) external {
-        uint256 totalStake = IERC20(TCKO_ADDR).balanceOf(address(this)) -
-            balancePendingWithdrawal;
         IERC20(TCKO_ADDR).transferFrom(msg.sender, address(this), amount);
         uint256 n = jointDepositCount;
         uint256 cumRate = jointDeposits[n] >> 64;
         jointDeposits[n + 1] =
-            ((((amount << 128) / totalStake) + cumRate) << 64) |
+            ((((amount << 128) / signerDepositBalance) + cumRate) << 64) |
             block.timestamp;
         jointDepositCount = n + 1;
     }
@@ -225,6 +253,7 @@ contract TCKTSigners is IDIDSigners, StakedIERC20 {
         // Ensure that `state(addr) == O`.
         require(signerInfo[addr] == 0);
         uint256 stakeAmount = stakingDeposit;
+        signerDepositBalance += stakeAmount;
         IERC20(TCKO_ADDR).transferFrom(addr, address(this), stakeAmount);
         unchecked {
             signerInfo[addr] = (stakeAmount << 64) | block.timestamp;
@@ -249,7 +278,8 @@ contract TCKTSigners is IDIDSigners, StakedIERC20 {
         require(info != 0 && (info & END_TS_MASK == 0));
         unchecked {
             uint256 toWithdraw = balanceOf(msg.sender);
-            balancePendingWithdrawal += toWithdraw;
+            uint256 deposited = uint64(info >> 64);
+            signerDepositBalance -= deposited;
             signerInfo[msg.sender] =
                 (toWithdraw << 192) |
                 (block.timestamp << 128) |
@@ -274,7 +304,6 @@ contract TCKTSigners is IDIDSigners, StakedIERC20 {
             require(toWithdraw != 0 && endTs != 0);
             require(block.timestamp > endTs + 30 days);
             signerInfo[msg.sender] = uint192(info);
-            balancePendingWithdrawal -= toWithdraw;
             IERC20(TCKO_ADDR).transfer(msg.sender, toWithdraw);
             emit Transfer(msg.sender, address(this), toWithdraw);
         }
@@ -294,19 +323,17 @@ contract TCKTSigners is IDIDSigners, StakedIERC20 {
         unchecked {
             uint256 info = signerInfo[addr];
             uint256 slashAmount = balanceOf(addr);
-            uint256 remainingStake = IERC20(TCKO_ADDR).balanceOf(
-                address(this)
-            ) -
-                balancePendingWithdrawal -
-                slashAmount;
+            uint256 signerBalanceLeft = signerDepositBalance -
+                uint64(info >> 64);
+            signerDepositBalance = signerBalanceLeft;
             uint256 n = jointDepositCount;
             uint256 cumRate = jointDeposits[n] >> 64;
             jointDeposits[n + 1] =
-                ((((slashAmount << 128) / remainingStake) + cumRate) << 64) |
+                ((((slashAmount << 128) / signerBalanceLeft) + cumRate) << 64) |
                 block.timestamp;
             jointDepositCount = n + 1;
             // The case `state(addr) == S`
-            if (info & END_TS_MASK == 0) {
+            if (info != 0 && info & END_TS_MASK == 0) {
                 signerInfo[addr] = (block.timestamp << 128) | info;
             } else {
                 // The case `state(addr) == U`
