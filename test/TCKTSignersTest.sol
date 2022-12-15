@@ -174,4 +174,65 @@ contract TCKTSignersTest is Test {
         assertEq(tcko.balanceOf(vm.addr(5)), 1e12);
         assertEq(tcktSigners.balanceOf(vm.addr(5)), 0);
     }
+
+    function testUnstakeSlash() external {
+        prepareSigners();
+        vm.startPrank(OYLAMA);
+        for (uint256 t = 1; t <= 5; ++t) {
+            vm.warp(t);
+            tcktSigners.approveSignerNode(vm.addr(t));
+            assertEq(tcktSigners.balanceOf(vm.addr(t)), 1e12);
+        }
+        vm.stopPrank();
+
+        vm.prank(vm.addr(5));
+        tcktSigners.unstake();
+        vm.prank(OYLAMA);
+        tcktSigners.slashSignerNode(vm.addr(4));
+
+        assertEq(tcktSigners.balanceOf(vm.addr(1)), 1333333333333);
+        assertEq(tcktSigners.balanceOf(vm.addr(2)), 1333333333333);
+        assertEq(tcktSigners.balanceOf(vm.addr(3)), 1333333333333);
+
+        vm.prank(OYLAMA);
+        tcktSigners.approveSignerNode(vm.addr(6));
+        assertEq(tcktSigners.balanceOf(vm.addr(6)), 1e12);
+
+        vm.warp(10);
+        vm.prank(OYLAMA);
+        tcktSigners.slashSignerNode(vm.addr(3));
+        assertEq(tcktSigners.balanceOf(vm.addr(1)), 1777777777777);
+        assertEq(tcktSigners.balanceOf(vm.addr(2)), 1777777777777);
+        assertEq(tcktSigners.balanceOf(vm.addr(5)), 1e12);
+        assertEq(tcktSigners.balanceOf(vm.addr(6)), 1444444444444);
+
+        vm.warp(10 + 30 days);
+        vm.prank(vm.addr(5));
+        tcktSigners.withdraw();
+        assertEq(tcktSigners.balanceOf(vm.addr(1)), 1777777777777);
+        assertEq(tcktSigners.balanceOf(vm.addr(2)), 1777777777777);
+        assertEq(tcktSigners.balanceOf(vm.addr(5)), 0);
+        assertEq(tcktSigners.balanceOf(vm.addr(6)), 1444444444444);
+    }
+
+    function testJointDeposit() external {
+        prepareSigners();
+        vm.startPrank(OYLAMA);
+        for (uint256 t = 1; t <= 5; ++t) {
+            vm.warp(t);
+            tcktSigners.approveSignerNode(vm.addr(t));
+            assertEq(tcktSigners.balanceOf(vm.addr(t)), 1e12);
+        }
+        vm.stopPrank();
+
+        vm.warp(6);
+        vm.startPrank(vm.addr(101));
+        tcko.mint(10e12);
+        tcko.approve(address(tcktSigners), 10e12);
+        tcktSigners.jointDeposit(10e12);
+        vm.stopPrank();
+
+        for (uint256 t = 1; t <= 5; ++t)
+            assertEq(tcktSigners.balanceOf(vm.addr(t)), 3e12);
+    }
 }
