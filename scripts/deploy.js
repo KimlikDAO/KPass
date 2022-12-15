@@ -50,7 +50,7 @@ const deployToChain = (chainId, signer) => {
       },
       outputSelection: {
         "TCKT.sol": {
-          "TCKT": ["abi", "evm.bytecode.object", "bytecode"]
+          "TCKT": ["abi", "evm.bytecode.object"]
         }
       }
     },
@@ -58,8 +58,16 @@ const deployToChain = (chainId, signer) => {
 
   const output = JSON.parse(solc.compile(JSON.stringify(compilerInput)));
   const TCKT = output.contracts["TCKT.sol"]["TCKT"];
+
+  if (chainId == "0xa86a") {
+    const solcjsBytecode = TCKT.evm.bytecode.object;
+    const foundryBytecode = JSON.parse(readFileSync("out/TCKT.sol/TCKT.json")).bytecode.object.slice(2);
+    if (solcjsBytecode.slice(0, -86) != foundryBytecode.slice(0, -86)) {
+      console.log("Bytecode differs from Foundry compiled one");
+      process.exit(1);
+    }
+  }
   const factory = new ethers.ContractFactory(TCKT.abi, TCKT.evm.bytecode.object);
-  console.log(factory);
 }
 
 const Foundry = parse(readFileSync("foundry.toml")).profile.default;
