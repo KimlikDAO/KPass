@@ -647,7 +647,7 @@ contract TCKT is IERC721 {
                 uint256 endTs = uint64(info >> 128);
                 require(
                     info != 0 &&
-                        uint64(info >> 64) <= timestamp &&
+                        uint64(info) <= timestamp &&
                         (endTs == 0 || timestamp < endTs)
                 );
             }
