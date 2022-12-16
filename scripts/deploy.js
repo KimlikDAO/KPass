@@ -4,29 +4,53 @@ import solc from "solc";
 import { parse } from "toml";
 
 /**
- * @param {string} file
- * @param {string} chainId
+ * @typedef {{ content: string }}
  */
-const processTCKT = (file, chainId) => chainId == "0xa86a"
-  ? file
-  : file.slice(0, file.indexOf("// Exposure report") - 92) + "}";
+let SourceFile;
 
 /**
  * @param {Array<string>} sourceNames
  * @param {string} chainId
+ * @return {!Object<string, !SourceFile>}
  */
-const readSources = (sourceNames, chainId) => Object.fromEntries(
-  sourceNames.map((name) => {
-    const file = readFileSync(name.startsWith("interfaces")
+const readSources = (sourceNames) => Object.fromEntries(
+  sourceNames.map((name) => [name, {
+    content: readFileSync(name.startsWith("interfaces")
       ? "lib/interfaces/contracts" + name.slice(10)
       : "contracts/" + name, "utf-8"
-    );
-    return [
-      name,
-      { content: name == "TCKT.sol" ? processTCKT(file, chainId) : file }
-    ]
-  })
+    )
+  }])
 )
+
+/**
+ * @param {!Object<string, !SourceFile>} sources
+ * @param {string} chainId
+ * @param {string} deployerAddress
+ * @return {!Object<string, !SourceFile>}
+ */
+const processSources = (sources, chainId, deployerAddress) => {
+  const deployedAddress = ethers.utils.getContractAddress({
+    from: deployerAddress,
+    nonce: 0
+  });
+  // Yerli ve milli
+  if (!deployedAddress.startsWith("0xcCc") || !deployedAddress.endsWith("cCc"))
+    process.exit(1);
+  const domainSeparator = ethers.utils._TypedDataEncoder.hashDomain({
+    name: 'TCKT',
+    version: '1',
+    chainId,
+    verifyingContract: deployedAddress
+  });
+  let file = sources["TCKT.sol"].content;
+  file = file.replace(
+    "0x8730afd3d29f868d9f7a9e3ec19e7635e9cf9802980a4a5c5ac0b443aea5fbd8",
+    domainSeparator);
+  if (chainId != "0xa86a")
+    file = file.slice(0, file.indexOf("// Exposure report") - 92) + "}";
+  sources["TCKT.sol"].content = file;
+  return sources;
+}
 
 /**
  * @param {string} chainId
@@ -35,14 +59,14 @@ const readSources = (sourceNames, chainId) => Object.fromEntries(
 const deployToChain = (chainId, signer) => {
   const compilerInput = {
     language: "Solidity",
-    sources: readSources([
+    sources: processSources(readSources([
       "IDIDSigners.sol",
       "interfaces/Addresses.sol",
       "interfaces/IERC20.sol",
       "interfaces/IERC20Permit.sol",
       "interfaces/IERC721.sol",
       "TCKT.sol",
-    ], chainId),
+    ]), chainId, signer.address),
     settings: {
       optimizer: {
         enabled: Foundry.optimizer,
@@ -55,7 +79,6 @@ const deployToChain = (chainId, signer) => {
       }
     },
   }
-
   const output = JSON.parse(solc.compile(JSON.stringify(compilerInput)));
   const TCKT = output.contracts["TCKT.sol"]["TCKT"];
 
@@ -73,5 +96,5 @@ const deployToChain = (chainId, signer) => {
 
 const Foundry = parse(readFileSync("foundry.toml")).profile.default;
 
-// new ethers.Wallet(process.argv[2])
-deployToChain("0x1", null);
+deployToChain("0x1",
+  new ethers.Wallet(process.argv[2] || "32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33"));
