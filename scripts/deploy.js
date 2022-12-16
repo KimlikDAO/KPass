@@ -8,8 +8,7 @@ import { parse } from "toml";
  */
 let SourceFile;
 
-
-const jsonRpcList = {
+const JsonRpcUrls = {
   "0x1": ["cloudflare-eth.com", "Ethereum"],
   "0xa86a": ["api.avax.network/ext/bc/C/rpc", "Avalanche"],
   "0x89": ["rpc-mainnet.matic.network", "Polygon"],
