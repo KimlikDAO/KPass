@@ -621,19 +621,25 @@ contract TCKT is IERC721 {
      * value can only be incremented.
      *
      * @param exposureReportID of the person whose wallet keys were exposed.
+     * @param commitRandom     commitment blinding randomness.
      * @param timestamp        of the exposureReportID signatures.
      * @param r                ECDSA r value of the validator signatures.
      * @param yParityAndS      ECSSA s and v values combined.
      */
     function reportExposure(
         bytes32 exposureReportID,
+        bytes32 commitRandom,
         uint64 timestamp,
         bytes32[3] calldata r,
         uint256[3] calldata yParityAndS
     ) external {
         unchecked {
             bytes32 digest = keccak256(
-                abi.encodePacked(exposureReportID, timestamp)
+                abi.encodePacked(
+                    exposureReportID,
+                    keccak256(abi.encodePacked(commitRandom, msg.sender)),
+                    timestamp
+                )
             );
             address[3] memory nodes;
             for (uint256 i = 0; i < 3; ++i) {
