@@ -615,6 +615,11 @@ contract TCKT is IERC721 {
     /// or zero if no exposure has been reported.
     mapping(bytes32 => uint256) public exposureReported;
 
+    struct Signature {
+        bytes32 r;
+        uint256 yParityAndS;
+    }
+
     /**
      * @notice Add a `exposureReportID` to exposed list.
      * A nonce is not needed since the `exposureReported[exposureReportID]`
@@ -622,14 +627,12 @@ contract TCKT is IERC721 {
      *
      * @param exposureReportID of the person whose wallet keys were exposed.
      * @param timestamp        of the exposureReportID signatures.
-     * @param r                ECDSA r value of the validator signatures.
-     * @param yParityAndS      ECSSA s and v values combined.
+     * @param signatures       ECDSA r value of the validator signatures.
      */
     function reportExposure(
         bytes32 exposureReportID,
         uint64 timestamp,
-        bytes32[3] calldata r,
-        uint256[3] calldata yParityAndS
+        Signature[3] calldata signatures
     ) external {
         unchecked {
             bytes32 digest = keccak256(
@@ -639,9 +642,9 @@ contract TCKT is IERC721 {
             for (uint256 i = 0; i < 3; ++i) {
                 signer[i] = ecrecover(
                     digest,
-                    uint8(yParityAndS[i] >> 255) + 27,
-                    r[i],
-                    bytes32(yParityAndS[i] & ((1 << 255) - 1))
+                    uint8(signatures[i].yParityAndS >> 255) + 27,
+                    signatures[i].r,
+                    bytes32(signatures[i].yParityAndS & ((1 << 255) - 1))
                 );
                 uint256 info = IDIDSigners(TCKT_SIGNERS).signerInfo(signer[i]);
                 uint256 endTs = uint64(info >> 128);

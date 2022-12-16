@@ -37,42 +37,28 @@ contract TCKTIntegrationTest is Test {
         bytes32 exposureReportID,
         uint64 timestamp,
         uint256 signerKey
-    ) internal pure returns (bytes32, uint256) {
+    ) internal pure returns (TCKT.Signature memory sig) {
         bytes32 digest = keccak256(
             abi.encodePacked(exposureReportID, timestamp)
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
-        return (r, uint256(s) | ((uint256(v) - 27) << 255));
+        sig.r = r;
+        sig.yParityAndS = ((uint256(v) - 27) << 255) | uint256(s);
     }
 
     function testReportFutureExposure() public {
-        (bytes32 r1, uint256 s1) = signOffExposureReport(
-            bytes32(uint256(123)),
-            100,
-            1
-        );
-        (bytes32 r2, uint256 s2) = signOffExposureReport(
-            bytes32(uint256(123)),
-            100,
-            2
-        );
-        (bytes32 r3, uint256 s3) = signOffExposureReport(
-            bytes32(uint256(123)),
-            100,
-            3
-        );
-        (bytes32 r4, uint256 s4) = signOffExposureReport(
-            bytes32(uint256(123)),
-            100,
-            4
-        );
-
+        TCKT.Signature[4] memory sigs = [
+            signOffExposureReport(bytes32(uint256(123)), 100, 1),
+            signOffExposureReport(bytes32(uint256(123)), 100, 2),
+            signOffExposureReport(bytes32(uint256(123)), 100, 3),
+            signOffExposureReport(bytes32(uint256(123)), 100, 4)
+        ];
+        vm.warp(1);
         vm.expectRevert();
         tckt.reportExposure(
             bytes32(uint256(123)),
             100,
-            [r1, r2, r3],
-            [s1, s2, s3]
+            [sigs[0], sigs[1], sigs[2]]
         );
         vm.warp(99);
         vm.startPrank(OYLAMA);
@@ -84,8 +70,7 @@ contract TCKTIntegrationTest is Test {
         tckt.reportExposure(
             bytes32(uint256(123)),
             100,
-            [r1, r2, r3],
-            [s1, s2, s3]
+            [sigs[0], sigs[1], sigs[2]]
         );
     }
 
@@ -97,26 +82,12 @@ contract TCKTIntegrationTest is Test {
         }
         vm.stopPrank();
 
-        (bytes32 r1, uint256 s1) = signOffExposureReport(
-            bytes32(uint256(123)),
-            130,
-            1
-        );
-        (bytes32 r2, uint256 s2) = signOffExposureReport(
-            bytes32(uint256(123)),
-            130,
-            2
-        );
-        (bytes32 r3, uint256 s3) = signOffExposureReport(
-            bytes32(uint256(123)),
-            130,
-            3
-        );
-        (bytes32 r4, uint256 s4) = signOffExposureReport(
-            bytes32(uint256(123)),
-            130,
-            4
-        );
+        TCKT.Signature[4] memory sigs = [
+            signOffExposureReport(bytes32(uint256(123)), 130, 1),
+            signOffExposureReport(bytes32(uint256(123)), 130, 2),
+            signOffExposureReport(bytes32(uint256(123)), 130, 3),
+            signOffExposureReport(bytes32(uint256(123)), 130, 4)
+        ];
         vm.warp(140);
         vm.startPrank(OYLAMA);
         for (uint256 i = 1; i < 10; ++i) {
@@ -127,35 +98,24 @@ contract TCKTIntegrationTest is Test {
         tckt.reportExposure(
             bytes32(uint256(123)),
             130,
-            [r1, r3, r3],
-            [s1, s3, s3]
+            [sigs[0], sigs[1], sigs[0]]
         );
         vm.expectRevert();
         tckt.reportExposure(
             bytes32(uint256(123)),
             130,
-            [r1, r3, r1],
-            [s1, s3, s1]
+            [sigs[0], sigs[1], sigs[1]]
         );
         vm.expectRevert();
         tckt.reportExposure(
             bytes32(uint256(123)),
             130,
-            [r1, r1, r3],
-            [s1, s1, s3]
-        );
-        vm.expectRevert();
-        tckt.reportExposure(
-            bytes32(uint256(123)),
-            130,
-            [r1, r2, r4],
-            [s1, s2, s4]
+            [sigs[0], sigs[0], sigs[1]]
         );
         tckt.reportExposure(
             bytes32(uint256(123)),
             130,
-            [r1, r2, r3],
-            [s1, s2, s3]
+            [sigs[0], sigs[1], sigs[2]]
         );
     }
 }
