@@ -3,52 +3,70 @@ import { readFileSync } from "fs";
 import solc from "solc";
 import { parse } from "toml";
 
+
 /**
- * @param {string} file
- * @param {string} chainId
+ * @typedef {{ content: string }}
  */
-const processTCKT = async (file, chainId) => {
-  file = file.replace(
-    "0x8730afd3d29f868d9f7a9e3ec19e7635e9cf9802980a4a5c5ac0b443aea5fbd8",
-    await computedDomainSeparator(chainId))
-  return chainId == "0xa86a"
-    ? file
-    : file.slice(0, file.indexOf("// Exposure report") - 92) + "}";
-}
+let SourceFile;
+
 /**
  * @param {Array<string>} sourceNames
  * @param {string} chainId
+ * @return {!Object<string, !SourceFile>}
  */
-const readSources = (sourceNames, chainId) => processTCKT(
-  readFileSync('./contracts/TCKT.sol', 'utf-8'), chainId)
-  .then((tcktFile) => Object.fromEntries(
-    sourceNames.map((name) => {
-      return [
-        name, {
-          content: name == "TCKT.sol" ? tcktFile : readFileSync(name.startsWith("interfaces")
-            ? "lib/interfaces/contracts" + name.slice(10)
-            : "contracts/" + name, "utf-8"
-          )
-        }
-      ]
-    }))
-  )
+const readSources = (sourceNames) => Object.fromEntries(
+  sourceNames.map((name) => [name, {
+    content: readFileSync(name.startsWith("interfaces")
+      ? "lib/interfaces/contracts" + name.slice(10)
+      : "contracts/" + name, "utf-8"
+    )
+  }])
+)
+
+/**
+ * @param {!Object<string, !SourceFile>} sources
+ * @param {string} chainId
+ * @param {string} deployerAddress
+ * @return {!Object<string, !SourceFile>}
+ */
+const processSources = (sources, chainId, deployerAddress) => {
+  const deployedAddress = ethers.utils.getContractAddress({
+    from: deployerAddress,
+    nonce: 0
+  });
+  const domainSeparator = ethers.utils._TypedDataEncoder.hashDomain({
+    name: 'TCKT',
+    version: '1',
+    chainId,
+    verifyingContract: deployedAddress
+  });
+  let file = sources["TCKT.sol"].content;
+  file = file.replace(
+    "0x8730afd3d29f868d9f7a9e3ec19e7635e9cf9802980a4a5c5ac0b443aea5fbd8",
+    domainSeparator);
+  if (chainId == "0xa86a")
+    file = file.slice(0, file.indexOf("// Exposure report") - 92) + "}";
+  sources["TCKT.sol"].content = file;
+  return sources;
+}
 
 /**
  * @param {string} chainId
  * @param {ethers.Wallet} signer
  */
-const deployToChain = async (chainId, signer) => {
+const deployToChain = (chainId, signer) => {
+  const deployerAddress = "0x0DabB96F2320A170ac0dDc985d105913D937ea9A";
+
   const compilerInput = {
     language: "Solidity",
-    sources: await readSources([
+    sources: processSources(readSources([
       "IDIDSigners.sol",
       "interfaces/Addresses.sol",
       "interfaces/IERC20.sol",
       "interfaces/IERC20Permit.sol",
       "interfaces/IERC721.sol",
       "TCKT.sol",
-    ], chainId),
+    ]), chainId, deployerAddress),
     settings: {
       optimizer: {
         enabled: Foundry.optimizer,
@@ -74,19 +92,6 @@ const deployToChain = async (chainId, signer) => {
   }
   const factory = new ethers.ContractFactory(TCKT.abi, TCKT.evm.bytecode.object);
   console.log(factory);
-}
-
-/**
- * @param {string} chainId
- * @return {Promise<string>}
- */
-const computedDomainSeparator = (chainId) => {
-  return ethers.utils._TypedDataEncoder.hashDomain({
-    name: 'TCKT',
-    version: '1',
-    chainId,
-    verifyingContract: '0xcCc0F938A2C94b0fFBa49F257902Be7F56E62cCc'
-  });
 }
 
 const Foundry = parse(readFileSync("foundry.toml")).profile.default;
