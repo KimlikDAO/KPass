@@ -5,7 +5,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
 import "interfaces/Addresses.sol";
 import {MockERC20Permit} from "interfaces/testing/MockTokens.sol";
-import {TCKT} from "contracts/TCKT.sol";
+import {Signature, TCKT} from "contracts/TCKT.sol";
 import {TCKTSigners} from "contracts/TCKTSigners.sol";
 
 contract TCKTIntegrationTest is Test {
@@ -37,7 +37,7 @@ contract TCKTIntegrationTest is Test {
         bytes32 exposureReportID,
         uint64 timestamp,
         uint256 signerKey
-    ) internal pure returns (TCKT.Signature memory sig) {
+    ) internal pure returns (Signature memory sig) {
         bytes32 digest = keccak256(
             abi.encodePacked(exposureReportID, timestamp)
         );
@@ -47,7 +47,7 @@ contract TCKTIntegrationTest is Test {
     }
 
     function testReportFutureExposure() public {
-        TCKT.Signature[4] memory sigs = [
+        Signature[4] memory sigs = [
             signOffExposureReport(bytes32(uint256(123)), 100, 1),
             signOffExposureReport(bytes32(uint256(123)), 100, 2),
             signOffExposureReport(bytes32(uint256(123)), 100, 3),
@@ -82,7 +82,7 @@ contract TCKTIntegrationTest is Test {
         }
         vm.stopPrank();
 
-        TCKT.Signature[4] memory sigs = [
+        Signature[4] memory sigs = [
             signOffExposureReport(bytes32(uint256(123)), 130, 1),
             signOffExposureReport(bytes32(uint256(123)), 130, 2),
             signOffExposureReport(bytes32(uint256(123)), 130, 3),

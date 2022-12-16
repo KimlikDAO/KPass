@@ -7,6 +7,11 @@ import {IDIDSigners} from "./IDIDSigners.sol";
 import {IERC20, IERC20Permit} from "interfaces/IERC20Permit.sol";
 import {IERC721} from "interfaces/IERC721.sol";
 
+struct Signature {
+    bytes32 r;
+    uint256 yParityAndS;
+}
+
 /**
  * @title KimlikDAO TCKT contract.
  * @author KimlikDAO
@@ -162,14 +167,12 @@ contract TCKT is IERC721 {
      * @param deadlineAndToken Contract address of a IERC20Permit token and
      *                         the timestamp until which the payment
      *                         authorization is valid for.
-     * @param r                ECDSA r value of the token spend permit.
-     * @param yParityAndS      ECSSA s and v values combined.
+     * @param signature        Signature authorizing the token spend.
      */
     function createWithTokenPermit(
         uint256 handle,
         uint256 deadlineAndToken,
-        bytes32 r,
-        uint256 yParityAndS
+        Signature calldata signature
     ) external {
         IERC20Permit token = IERC20Permit(address(uint160(deadlineAndToken)));
         uint256 price = priceIn[address(token)] >> 128;
@@ -180,9 +183,9 @@ contract TCKT is IERC721 {
                 address(this),
                 price,
                 deadlineAndToken >> 160,
-                uint8(yParityAndS >> 255) + 27,
-                r,
-                bytes32(yParityAndS & ((1 << 255) - 1))
+                uint8(signature.yParityAndS >> 255) + 27,
+                signature.r,
+                bytes32(signature.yParityAndS & ((1 << 255) - 1))
             );
         }
         token.transferFrom(msg.sender, DAO_KASASI, price);
@@ -216,15 +219,13 @@ contract TCKT is IERC721 {
      *                         into a single word, where the weight is a uint96
      *                         and the address is 20 bytes.
      * @param deadlineAndToken Contract address of a IERC20Permit token.
-     * @param r                ECDSA r value of the token spend permit.
-     * @param yParityAndS      ECSSA s and v values combined.
+     * @param signature        Signature authorizing the token spend.
      */
     function createWithRevokersWithTokenPermit(
         uint256 handle,
         uint256[5] calldata revokers,
         uint256 deadlineAndToken,
-        bytes32 r,
-        uint256 yParityAndS
+        Signature calldata signature
     ) external {
         IERC20Permit token = IERC20Permit(address(uint160(deadlineAndToken)));
         uint256 price = uint128(priceIn[address(token)]);
@@ -235,9 +236,9 @@ contract TCKT is IERC721 {
                 address(this),
                 price,
                 deadlineAndToken >> 160,
-                uint8(yParityAndS >> 255) + 27,
-                r,
-                bytes32(yParityAndS & ((1 << 255) - 1))
+                uint8(signature.yParityAndS >> 255) + 27,
+                signature.r,
+                bytes32(signature.yParityAndS & ((1 << 255) - 1))
             );
         }
         token.transferFrom(msg.sender, DAO_KASASI, price);
@@ -258,7 +259,7 @@ contract TCKT is IERC721 {
     //     )
     // );
     bytes32 public constant DOMAIN_SEPARATOR =
-        0x7f09fc8776645c556371127677a2206a00976e7f49fa8690739ee07c5b3bc805;
+        0x8730afd3d29f868d9f7a9e3ec19e7635e9cf9802980a4a5c5ac0b443aea5fbd8;
 
     // keccak256("CreateFor(uint256 handle)")
     bytes32 public constant CREATE_FOR_TYPEHASH =
@@ -268,28 +269,23 @@ contract TCKT is IERC721 {
      * Creates a TCKT on users behalf, covering the tx fee.
      *
      * The user has to explicitly authorize the TCKT creation with the
-     * (createR, createSS) signature and the token payment with the
-     * (paymentR, paymentSS) signature.
+     * `createSig`and the token payment with the `paymentSig`.
      *
      * The gas fee is paid by the transaction sender, which typically is
      * someone other than the TCKT owner. This enables gasless TCKT mints,
      * wherein the gas fee is covered by the KimlikDAO gas station.
      *
      * @param handle           IPFS handle with which to create the TCKT.
-     * @param createR          ECDSA r value of the create signature.
-     * @param createSS         ECDSA s and v values combined.
+     * @param createSig        Signature from the sender for creating a TCKT.
      * @param deadlineAndToken The payment token and the deadline for the token
      *                         permit signature.
-     * @param paymentR         ECDSA r value of the token spend permit signature.
-     * @param paymentSS        ECDSA s and v values combined.
+     * @param paymentSig       Token spend permission from the sender.
      */
     function createFor(
         uint256 handle,
-        bytes32 createR,
-        uint256 createSS,
+        Signature calldata createSig,
         uint256 deadlineAndToken,
-        bytes32 paymentR,
-        uint256 paymentSS
+        Signature calldata paymentSig
     ) external {
         IERC20Permit token = IERC20Permit(address(uint160(deadlineAndToken)));
         uint256 price = priceIn[address(token)] >> 128;
@@ -304,9 +300,9 @@ contract TCKT is IERC721 {
             );
             address signer = ecrecover(
                 digest,
-                uint8(createSS >> 255) + 27,
-                createR,
-                bytes32(createSS & ((1 << 255) - 1))
+                uint8(createSig.yParityAndS >> 255) + 27,
+                createSig.r,
+                bytes32(createSig.yParityAndS & ((1 << 255) - 1))
             );
             require(signer != address(0) && handleOf[uint160(signer)] == 0);
             token.permit(
@@ -314,9 +310,9 @@ contract TCKT is IERC721 {
                 address(this),
                 price,
                 deadlineAndToken >> 160,
-                uint8(paymentSS >> 255) + 27,
-                paymentR,
-                bytes32(paymentSS & ((1 << 255) - 1))
+                uint8(paymentSig.yParityAndS >> 255) + 27,
+                paymentSig.r,
+                bytes32(paymentSig.yParityAndS & ((1 << 255) - 1))
             );
             token.transferFrom(signer, DAO_KASASI, price);
             handleOf[uint160(signer)] = handle;
@@ -467,14 +463,11 @@ contract TCKT is IERC721 {
      * doesn't have an EVM adress (but an email address) can cast a social
      * revoke vote.
      *
-     * @param r                ECDSA r value for revokeFriendFor signature.
-     * @param yParityAndS      ECDSA s and v values combined.
+     * @param signature        Signature authorizing the revoke.
      */
-    function revokeFriendFor(
-        address friend,
-        bytes32 r,
-        uint256 yParityAndS
-    ) external {
+    function revokeFriendFor(address friend, Signature calldata signature)
+        external
+    {
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
@@ -485,9 +478,9 @@ contract TCKT is IERC721 {
         unchecked {
             address revoker = ecrecover(
                 digest,
-                uint8(yParityAndS >> 255) + 27,
-                r,
-                bytes32(yParityAndS & ((1 << 255) - 1))
+                uint8(signature.yParityAndS >> 255) + 27,
+                signature.r,
+                bytes32(signature.yParityAndS & ((1 << 255) - 1))
             );
             require(revoker != address(0));
             uint256 revInfo = revokeInfo[friend];
@@ -615,11 +608,6 @@ contract TCKT is IERC721 {
     /// or zero if no exposure has been reported.
     mapping(bytes32 => uint256) public exposureReported;
 
-    struct Signature {
-        bytes32 r;
-        uint256 yParityAndS;
-    }
-
     /**
      * @notice Add a `exposureReportID` to exposed list.
      * A nonce is not needed since the `exposureReported[exposureReportID]`
@@ -627,7 +615,7 @@ contract TCKT is IERC721 {
      *
      * @param exposureReportID of the person whose wallet keys were exposed.
      * @param timestamp        of the exposureReportID signatures.
-     * @param signatures       ECDSA r value of the validator signatures.
+     * @param signatures       Signer node signatures for the exposureReportID.
      */
     function reportExposure(
         bytes32 exposureReportID,

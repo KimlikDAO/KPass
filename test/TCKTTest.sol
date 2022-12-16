@@ -2,12 +2,12 @@
 
 pragma solidity ^0.8.0;
 
-import "contracts/TCKT.sol";
 import "forge-std/Test.sol";
 import "interfaces/Addresses.sol";
 import "interfaces/AvalancheTokens.sol";
-import "interfaces/IERC20Permit.sol";
 import "interfaces/testing/MockTokens.sol";
+import {IERC20Permit} from "interfaces/IERC20Permit.sol";
+import {Signature, TCKT} from "contracts/TCKT.sol";
 
 contract TCKTTest is Test {
     TCKT private tckt;
@@ -104,12 +104,12 @@ contract TCKTTest is Test {
             )
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(10, digest);
-        vm.prank(vm.addr(100));
-        tckt.revokeFriendFor(
-            vm.addr(0x1337ACC),
+        Signature memory sig = Signature(
             r,
             (uint256(v - 27) << 255) | uint256(s)
         );
+        vm.prank(vm.addr(100));
+        tckt.revokeFriendFor(vm.addr(0x1337ACC), sig);
 
         assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
 
@@ -157,8 +157,7 @@ contract TCKTTest is Test {
         vm.prank(vm.addr(100));
         tckt.revokeFriendFor(
             vm.addr(0x1337ACC),
-            r,
-            (uint256(v - 27) << 255) | uint256(s)
+            Signature(r, (uint256(v - 27) << 255) | uint256(s))
         );
 
         assertEq(tckt.balanceOf(address(this)), 0);
@@ -260,15 +259,7 @@ contract TCKTTest is Test {
         uint256 amount,
         uint256 deadline,
         uint256 nonce
-    )
-        internal
-        view
-        returns (
-            uint8,
-            bytes32,
-            bytes32
-        )
-    {
+    ) internal view returns (Signature memory) {
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
@@ -285,7 +276,8 @@ contract TCKTTest is Test {
                 )
             )
         );
-        return vm.sign(0x1337ACC, digest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(0x1337ACC, digest);
+        return Signature(r, (uint256(v - 27) << 255) | uint256(s));
     }
 
     function testUSDTPayment() public {
@@ -300,18 +292,12 @@ contract TCKTTest is Test {
 
         {
             uint256 deadline = block.timestamp + 1200;
-            (uint8 v, bytes32 r, bytes32 s) = authorizePayment(
-                USDT,
-                3e6,
-                deadline,
-                0
-            );
+            Signature memory sig = authorizePayment(USDT, 3e6, deadline, 0);
 
             vm.prank(vm.addr(0x1337ACC));
             uint256 deadlineAndToken = (deadline << 160) |
                 uint160(address(USDT));
-            uint256 ss = (uint256(v - 27) << 255) | uint256(s);
-            tckt.createWithTokenPermit(123123123, deadlineAndToken, r, ss);
+            tckt.createWithTokenPermit(123123123, deadlineAndToken, sig);
             assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
         }
 
@@ -319,40 +305,33 @@ contract TCKTTest is Test {
         tckt.revoke();
         {
             uint256 deadline = block.timestamp + 1200;
-            (uint8 v, bytes32 r, bytes32 s) = authorizePayment(
-                USDT,
-                3e6,
-                deadline,
-                1
-            );
-            uint256 ss = (uint256(v - 27) << 255) | uint256(s);
+            Signature memory sig = authorizePayment(USDT, 3e6, deadline, 1);
             uint256 deadlineAndToken = (deadline << 160) |
                 uint160(address(USDT));
             vm.prank(vm.addr(0x1337ACC));
-            tckt.createWithTokenPermit(123123123, deadlineAndToken, r, ss);
+            tckt.createWithTokenPermit(123123123, deadlineAndToken, sig);
             assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
         }
         vm.prank(vm.addr(0x1337ACC));
         tckt.revoke();
         {
             uint256 deadline = block.timestamp + 1200;
-            (uint8 v, bytes32 r, bytes32 s) = authorizePayment(
+            Signature memory sig = authorizePayment(
                 USDT,
                 2.999999e6,
                 deadline,
                 2
             );
-            uint256 ss = (uint256(v - 27) << 255) | uint256(s);
             uint256 deadlineAndToken = (deadline << 160) |
                 uint160(address(USDT));
             vm.prank(vm.addr(0x1337ACC));
             vm.expectRevert();
-            tckt.createWithTokenPermit(123123123, deadlineAndToken, r, ss);
+            tckt.createWithTokenPermit(123123123, deadlineAndToken, sig);
         }
     }
 
     bytes32 DOMAIN_SEPARATOR =
-        0x7f09fc8776645c556371127677a2206a00976e7f49fa8690739ee07c5b3bc805;
+        0x8730afd3d29f868d9f7a9e3ec19e7635e9cf9802980a4a5c5ac0b443aea5fbd8;
 
     // keccak256("CreateFor(uint256 handle)")
     bytes32 CREATE_FOR_TYPEHASH =
@@ -361,7 +340,7 @@ contract TCKTTest is Test {
     function authorizeCreateFor(uint256 handle)
         public
         view
-        returns (bytes32, uint256)
+        returns (Signature memory)
     {
         bytes32 digest = keccak256(
             abi.encodePacked(
@@ -371,7 +350,7 @@ contract TCKTTest is Test {
             )
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(0x1337ACC, digest);
-        return (r, (uint256(v - 27) << 255) | uint256(s));
+        return Signature(r, (uint256(v - 27) << 255) | uint256(s));
     }
 
     function testCreateFor() public {
@@ -386,24 +365,18 @@ contract TCKTTest is Test {
 
         {
             uint256 deadline = block.timestamp + 1200;
-            (uint8 v, bytes32 paymentR, bytes32 s) = authorizePayment(
-                USDT,
-                3e6, // 2 * 1.5 for revokerless premium.
-                deadline,
-                0
-            );
-
             uint256 deadlineAndToken = (deadline << 160) |
                 uint160(address(USDT));
-            uint256 paymentSS = (uint256(v - 27) << 255) | uint256(s);
-            (bytes32 createR, uint256 createSS) = authorizeCreateFor(123123123);
             tckt.createFor(
                 123123123,
-                createR,
-                createSS,
+                authorizeCreateFor(123123123),
                 deadlineAndToken,
-                paymentR,
-                paymentSS
+                authorizePayment(
+                    USDT,
+                    3e6, // 2 * 1.5 for revokerless premium.
+                    deadline,
+                    0
+                )
             );
             assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
         }
@@ -412,26 +385,17 @@ contract TCKTTest is Test {
         tckt.revoke();
         {
             uint256 deadline = block.timestamp + 1200;
-            (uint8 v, bytes32 paymentR, bytes32 s) = authorizePayment(
+            uint256 deadlineAndToken = (deadline << 160) |
+                uint160(address(USDT));
+            Signature memory createSig = authorizeCreateFor(123123123);
+            Signature memory paymentSig = authorizePayment(
                 USDT,
                 2.99e6,
                 deadline,
                 0
             );
-
-            uint256 deadlineAndToken = (deadline << 160) |
-                uint160(address(USDT));
-            uint256 paymentSS = (uint256(v - 27) << 255) | uint256(s);
-            (bytes32 createR, uint256 createSS) = authorizeCreateFor(123123123);
             vm.expectRevert();
-            tckt.createFor(
-                123123123,
-                createR,
-                createSS,
-                deadlineAndToken,
-                paymentR,
-                paymentSS
-            );
+            tckt.createFor(123123123, createSig, deadlineAndToken, paymentSig);
         }
     }
 }
