@@ -635,15 +635,15 @@ contract TCKT is IERC721 {
             bytes32 digest = keccak256(
                 abi.encodePacked(exposureReportID, timestamp)
             );
-            address[3] memory nodes;
+            address[3] memory signer;
             for (uint256 i = 0; i < 3; ++i) {
-                nodes[i] = ecrecover(
+                signer[i] = ecrecover(
                     digest,
                     uint8(yParityAndS[i] >> 255) + 27,
                     r[i],
                     bytes32(yParityAndS[i] & ((1 << 255) - 1))
                 );
-                uint256 info = IDIDSigners(TCKT_SIGNERS).signerInfo(nodes[i]);
+                uint256 info = IDIDSigners(TCKT_SIGNERS).signerInfo(signer[i]);
                 uint256 endTs = uint64(info >> 128);
                 require(
                     info != 0 &&
@@ -652,9 +652,9 @@ contract TCKT is IERC721 {
                 );
             }
             require(
-                nodes[0] != nodes[1] &&
-                    nodes[0] != nodes[2] &&
-                    nodes[1] != nodes[2]
+                signer[0] != signer[1] &&
+                    signer[0] != signer[2] &&
+                    signer[1] != signer[2]
             );
         }
         // Exposure report timestamp can only be incremented.

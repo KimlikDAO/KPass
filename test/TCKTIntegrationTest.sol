@@ -24,6 +24,13 @@ contract TCKTIntegrationTest is Test {
         assertEq(address(tckt), TCKT_ADDR);
         assertEq(address(tcktSigners), TCKT_SIGNERS);
         assertEq(address(tcko), TCKO_ADDR);
+
+        for (uint256 i = 1; i <= 10; ++i) {
+            vm.startPrank(vm.addr(i));
+            tcko.mint(1e12);
+            tcko.approve(address(tcktSigners), 1e12);
+            vm.stopPrank();
+        }
     }
 
     function signOffExposureReport(
@@ -38,14 +45,51 @@ contract TCKTIntegrationTest is Test {
         return (r, uint256(s) | ((uint256(v) - 27) << 255));
     }
 
-    function testReportExposure() public {
-        for (uint256 i = 1; i <= 10; ++i) {
-            vm.startPrank(vm.addr(i));
-            tcko.mint(1e12);
-            tcko.approve(address(tcktSigners), 1e12);
-            vm.stopPrank();
-        }
+    function testReportFutureExposure() public {
+        (bytes32 r1, uint256 s1) = signOffExposureReport(
+            bytes32(uint256(123)),
+            100,
+            1
+        );
+        (bytes32 r2, uint256 s2) = signOffExposureReport(
+            bytes32(uint256(123)),
+            100,
+            2
+        );
+        (bytes32 r3, uint256 s3) = signOffExposureReport(
+            bytes32(uint256(123)),
+            100,
+            3
+        );
+        (bytes32 r4, uint256 s4) = signOffExposureReport(
+            bytes32(uint256(123)),
+            100,
+            4
+        );
 
+        vm.expectRevert();
+        tckt.reportExposure(
+            bytes32(uint256(123)),
+            100,
+            [r1, r2, r3],
+            [s1, s2, s3]
+        );
+        vm.warp(99);
+        vm.startPrank(OYLAMA);
+        tcktSigners.approveSignerNode(vm.addr(1));
+        tcktSigners.approveSignerNode(vm.addr(2));
+        tcktSigners.approveSignerNode(vm.addr(3));
+        tcktSigners.approveSignerNode(vm.addr(4));
+        vm.stopPrank();
+        tckt.reportExposure(
+            bytes32(uint256(123)),
+            100,
+            [r1, r2, r3],
+            [s1, s2, s3]
+        );
+    }
+
+    function testReportExposure() public {
         vm.startPrank(OYLAMA);
         for (uint256 i = 1; i <= 10; ++i) {
             vm.warp(100 + 10 * i);
