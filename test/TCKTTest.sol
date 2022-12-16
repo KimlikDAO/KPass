@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.17;
+pragma solidity ^0.8.0;
 
 import "contracts/TCKT.sol";
 import "forge-std/Test.sol";
@@ -433,17 +433,5 @@ contract TCKTTest is Test {
                 paymentSS
             );
         }
-    }
-
-    function signOffExposureReport(
-        bytes32 exposureReportID,
-        uint64 timestamp,
-        uint256 signerKey
-    ) internal pure returns (bytes32, uint256) {
-        bytes32 digest = keccak256(
-            abi.encodePacked(exposureReportID, timestamp)
-        );
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
-        return (r, uint256(s) | ((uint256(v) - 27) << 255));
     }
 }

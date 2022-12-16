@@ -66,7 +66,12 @@ const processSources = (sources, chainId, deployerAddress) => {
  * @param {string} chainId
  * @param {ethers.Wallet} signer
  */
-const deployToChain = (chainId, signer) => {
+const deployToChain = (chainId, privKey) => {
+  /** @const {ethers.Provider} */
+  const provider = new ethers.providers.JsonRpcProvider("https://" + JsonRpcUrls[chainId]);
+  /** @const {ethers.Wallet} */
+  const wallet = new ethers.Wallet(privKey, provider);
+
   const compilerInput = {
     language: "Solidity",
     sources: processSources(readSources([
@@ -76,7 +81,7 @@ const deployToChain = (chainId, signer) => {
       "interfaces/IERC20Permit.sol",
       "interfaces/IERC721.sol",
       "TCKT.sol",
-    ]), chainId, signer.address),
+    ]), chainId, wallet.address),
     settings: {
       optimizer: {
         enabled: Foundry.optimizer,
@@ -100,11 +105,11 @@ const deployToChain = (chainId, signer) => {
       process.exit(1);
     }
   }
-  const factory = new ethers.ContractFactory(TCKT.abi, TCKT.evm.bytecode.object);
+  const factory = new ethers.ContractFactory(TCKT.abi, TCKT.evm.bytecode.object, wallet);
   console.log(factory);
 }
 
 const Foundry = parse(readFileSync("foundry.toml")).profile.default;
 
 deployToChain("0x1",
-  new ethers.Wallet(process.argv[2] || "32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33"));
+  process.argv[2] || "32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33");
