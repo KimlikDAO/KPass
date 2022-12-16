@@ -3,7 +3,6 @@ import { readFileSync } from "fs";
 import solc from "solc";
 import { parse } from "toml";
 
-
 /**
  * @typedef {{ content: string }}
  */
@@ -34,6 +33,9 @@ const processSources = (sources, chainId, deployerAddress) => {
     from: deployerAddress,
     nonce: 0
   });
+  // Yerli ve milli
+  if (!deployedAddress.startsWith("0xcCc") || !deployedAddress.endsWith("cCc"))
+    process.exit(1);
   const domainSeparator = ethers.utils._TypedDataEncoder.hashDomain({
     name: 'TCKT',
     version: '1',
@@ -44,7 +46,7 @@ const processSources = (sources, chainId, deployerAddress) => {
   file = file.replace(
     "0x8730afd3d29f868d9f7a9e3ec19e7635e9cf9802980a4a5c5ac0b443aea5fbd8",
     domainSeparator);
-  if (chainId == "0xa86a")
+  if (chainId != "0xa86a")
     file = file.slice(0, file.indexOf("// Exposure report") - 92) + "}";
   sources["TCKT.sol"].content = file;
   return sources;
@@ -55,8 +57,6 @@ const processSources = (sources, chainId, deployerAddress) => {
  * @param {ethers.Wallet} signer
  */
 const deployToChain = (chainId, signer) => {
-  const deployerAddress = "0x0DabB96F2320A170ac0dDc985d105913D937ea9A";
-
   const compilerInput = {
     language: "Solidity",
     sources: processSources(readSources([
@@ -66,7 +66,7 @@ const deployToChain = (chainId, signer) => {
       "interfaces/IERC20Permit.sol",
       "interfaces/IERC721.sol",
       "TCKT.sol",
-    ]), chainId, deployerAddress),
+    ]), chainId, signer.address),
     settings: {
       optimizer: {
         enabled: Foundry.optimizer,
@@ -96,5 +96,5 @@ const deployToChain = (chainId, signer) => {
 
 const Foundry = parse(readFileSync("foundry.toml")).profile.default;
 
-// new ethers.Wallet(process.argv[2])
-deployToChain("0x1", null);
+deployToChain("0x1",
+  new ethers.Wallet(process.argv[2] || "32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33"));
