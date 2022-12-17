@@ -487,10 +487,16 @@ contract TCKT is IERC721 {
      */
     function addRevoker(uint256 deltaAndRevoker) external {
         address revoker = address(uint160(deltaAndRevoker));
-        uint256 weight = revokerWeight[msg.sender][revoker] +
-            (deltaAndRevoker >> 160); // Checked addition
-        revokerWeight[msg.sender][revoker] = weight;
-        emit RevokerAssignment(msg.sender, revoker, weight);
+        unchecked {
+            uint256 weight = revokerWeight[msg.sender][revoker] +
+                (deltaAndRevoker >> 160);
+            // Even after a complete compromise of the wallet private key, the
+            // attacker should not be able to decrease revoker weights by
+            // overflowing.
+            require(weight <= type(uint64).max);
+            revokerWeight[msg.sender][revoker] = weight;
+            emit RevokerAssignment(msg.sender, revoker, weight);
+        }
     }
 
     /**

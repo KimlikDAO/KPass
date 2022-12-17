@@ -223,6 +223,31 @@ contract TCKTTest is Test {
         assertGe(tckt.lastRevokeTimestamp(address(this)), 100);
     }
 
+    function testRevokerWeightsCannotBeDecremented() public {
+        // Consider a well intentioned social revoke TCKT ...
+        tckt.createWithRevokers(
+            1337,
+            [
+                (uint256(7) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(4) << 160) | uint160(vm.addr(11)),
+                (uint256(5) << 160) | uint160(vm.addr(12)),
+                (uint256(6) << 160) | uint160(vm.addr(13)),
+                (uint256(7) << 160) | uint160(vm.addr(14))
+            ]
+        );
+        // And now the private keys got compromised and the attacker
+        // is trying to prevent social revokers from revoking.
+
+        // Test for overflow cases.
+        vm.expectRevert();
+        tckt.addRevoker((type(uint256).max << 160) | uint160(vm.addr(11)));
+
+        vm.expectRevert();
+        tckt.reduceRevokeThreshold(8);
+    }
+
     function testReduceRevokeThreshold() public {
         uint256[5] memory revokers = [
             (uint256(1) << 192) | (uint256(1) << 160) | uint160(vm.addr(10)),
@@ -371,6 +396,14 @@ contract TCKTTest is Test {
         tckt.create{value: 0.074 ether}(123123123);
 
         tckt.create{value: 0.075 ether}(1231231233);
+    }
+
+    function testUpdate() public {
+        vm.expectRevert();
+        tckt.update(1338);
+
+        tckt.create(1337);
+        tckt.update(1338);
     }
 
     bytes32 public constant PERMIT_TYPEHASH =
