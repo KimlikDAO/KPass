@@ -8,10 +8,11 @@ import { parse } from "toml";
  */
 let SourceFile;
 
+/** @type {!Object<string, !Array<string>>} */
 const JsonRpcUrls = {
   "0x1": ["cloudflare-eth.com", "Ethereum"],
   "0xa86a": ["api.avax.network/ext/bc/C/rpc", "Avalanche"],
-  "0x89": ["rpc-mainnet.matic.network", "Polygon"],
+  "0x89": ["polygon-rpc.com", "Polygon"],
   "0xa4b1": ["arb1.arbitrum.io/rpc", "Arbitrum"],
   "0x38": ["bsc-dataseed.binance.org", "BNB Chain"],
   "0x406": ["evm.confluxrpc.com", "Conflux eSpace"],
@@ -55,7 +56,8 @@ const processSources = (sources, chainId, deployerAddress) => {
     verifyingContract: deployedAddress
   });
   let file = sources["TCKT.sol"].content;
-  console.log(domainSeparator);
+  console.log(`${chainId}\tDOMAIN_SEPARATOR() = ${domainSeparator}`);
+
   const avalancheDomainSeparator = "0x7fac9a4ba27a28c432ccad9cad6a299334875c9ce9801df0d292862b0d4f51cb";
   if (!file.includes(avalancheDomainSeparator)) {
     console.error("TCKT.sol does not have the right DOMAIN_SEPARATOR");
@@ -70,12 +72,12 @@ const processSources = (sources, chainId, deployerAddress) => {
 
 /**
  * @param {string} chainId
- * @param {ethers.Wallet} signer
+ * @param {string} privKey
  */
 const deployToChain = (chainId, privKey) => {
-  /** @const {ethers.Provider} */
+  /** @const {!ethers.Provider} */
   const provider = new ethers.providers.JsonRpcProvider("https://" + JsonRpcUrls[chainId][0]);
-  /** @const {ethers.Wallet} */
+  /** @const {!ethers.Wallet} */
   const wallet = new ethers.Wallet(privKey, provider);
 
   const compilerInput = {
@@ -115,11 +117,12 @@ const deployToChain = (chainId, privKey) => {
   const deployTransaction = factory.getDeployTransaction();
   const estimatedGas = provider.estimateGas(deployTransaction.data);
   estimatedGas.then((estimate) => {
-    console.log(estimate.toBigInt());
+    console.log(`${chainId}\t\tgas: ${estimate.toBigInt()}`);
   })
 }
 
 const Foundry = parse(readFileSync("foundry.toml")).profile.default;
 
-deployToChain("0xa86a",
-  process.argv[2] || "32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33");
+Object.keys(JsonRpcUrls).forEach((chainId) =>
+  deployToChain(chainId,
+    process.argv[2] || "32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33"));
