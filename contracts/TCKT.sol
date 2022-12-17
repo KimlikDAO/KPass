@@ -17,7 +17,7 @@ struct Signature {
  * @author KimlikDAO
  */
 contract TCKT is IERC721 {
-    mapping(uint256 => uint256) public handleOf;
+    mapping(address => uint256) public handleOf;
 
     function name() external pure override returns (string memory) {
         return "KimlikDAO TC Kimlik Tokeni";
@@ -35,7 +35,7 @@ contract TCKT is IERC721 {
      * a personal information change occurs.
      */
     function balanceOf(address addr) external view override returns (uint256) {
-        return handleOf[uint160(addr)] == 0 ? 0 : 1;
+        return handleOf[addr] == 0 ? 0 : 1;
     }
 
     /**
@@ -92,7 +92,7 @@ contract TCKT is IERC721 {
      */
     function create(uint256 handle) external payable {
         require(msg.value >= (priceIn[address(0)] >> 128));
-        handleOf[uint160(msg.sender)] = handle;
+        handleOf[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
     }
 
@@ -135,7 +135,7 @@ contract TCKT is IERC721 {
         payable
     {
         require(msg.value >= uint128(priceIn[address(0)]));
-        handleOf[uint160(msg.sender)] = handle;
+        handleOf[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
         setRevokers(revokers);
     }
@@ -148,7 +148,7 @@ contract TCKT is IERC721 {
         uint256 price = priceIn[address(token)] >> 128;
         require(price > 0);
         token.transferFrom(msg.sender, DAO_KASASI, price);
-        handleOf[uint160(msg.sender)] = handle;
+        handleOf[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
     }
 
@@ -189,7 +189,7 @@ contract TCKT is IERC721 {
             );
         }
         token.transferFrom(msg.sender, DAO_KASASI, price);
-        handleOf[uint160(msg.sender)] = handle;
+        handleOf[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
     }
 
@@ -208,7 +208,7 @@ contract TCKT is IERC721 {
         uint256 price = uint128(priceIn[address(token)]);
         require(price > 0);
         token.transferFrom(msg.sender, DAO_KASASI, price);
-        handleOf[uint160(msg.sender)] = handle;
+        handleOf[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
         setRevokers(revokers);
     }
@@ -242,7 +242,7 @@ contract TCKT is IERC721 {
             );
         }
         token.transferFrom(msg.sender, DAO_KASASI, price);
-        handleOf[uint160(msg.sender)] = handle;
+        handleOf[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
         setRevokers(revokers);
     }
@@ -304,7 +304,7 @@ contract TCKT is IERC721 {
                 createSig.r,
                 bytes32(createSig.yParityAndS & ((1 << 255) - 1))
             );
-            require(signer != address(0) && handleOf[uint160(signer)] == 0);
+            require(signer != address(0) && handleOf[signer] == 0);
             token.permit(
                 signer,
                 address(this),
@@ -315,7 +315,7 @@ contract TCKT is IERC721 {
                 bytes32(paymentSig.yParityAndS & ((1 << 255) - 1))
             );
             token.transferFrom(signer, DAO_KASASI, price);
-            handleOf[uint160(signer)] = handle;
+            handleOf[signer] = handle;
             emit Transfer(address(this), signer, handle);
         }
     }
@@ -325,22 +325,8 @@ contract TCKT is IERC721 {
      *                         IFPS handle.
      */
     function update(uint256 handle) external {
-        require(handleOf[uint160(msg.sender)] != 0);
-        handleOf[uint160(msg.sender)] = handle;
-    }
-
-    /**
-     * Appends a document to a TCKT.
-     *
-     * @param docHandle        IPFS hash of the persisted document.
-     */
-    function addDocument(uint256 docHandle) external {
-        uint256 handle = handleOf[uint160(msg.sender)];
-        require(handle != 0);
-        uint256 prevDoc = handleOf[handle];
-        handleOf[handle] = docHandle;
-        if (prevDoc != 0 && handleOf[docHandle] == 0)
-            handleOf[docHandle] = prevDoc;
+        require(handleOf[msg.sender] != 0);
+        handleOf[msg.sender] = handle;
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -407,7 +393,7 @@ contract TCKT is IERC721 {
 
         address rev4Addr = address(uint160(revokers[4]));
         if (rev4Addr == address(0)) return;
-        revokerWeight[msg.sender][rev4Addr] = revokers[4] << 160;
+        revokerWeight[msg.sender][rev4Addr] = revokers[4] >> 160;
         emit RevokerAssignment(msg.sender, rev4Addr, revokers[4] >> 160);
     }
 
@@ -418,9 +404,9 @@ contract TCKT is IERC721 {
      * method.
      */
     function revoke() external {
-        emit Transfer(msg.sender, address(this), handleOf[uint160(msg.sender)]);
+        emit Transfer(msg.sender, address(this), handleOf[msg.sender]);
         revokeInfo[msg.sender] = block.timestamp;
-        delete handleOf[uint160(msg.sender)];
+        delete handleOf[msg.sender];
     }
 
     /**
@@ -442,13 +428,9 @@ contract TCKT is IERC721 {
         unchecked {
             if (senderWeight >= (revInfo & REVOKES_REMAINING_MASK)) {
                 revokeInfo[friend] = block.timestamp;
-                if (handleOf[uint160(friend)] != 0) {
-                    emit Transfer(
-                        friend,
-                        address(this),
-                        handleOf[uint160(friend)]
-                    );
-                    delete handleOf[uint160(friend)];
+                if (handleOf[friend] != 0) {
+                    emit Transfer(friend, address(this), handleOf[friend]);
+                    delete handleOf[friend];
                 }
             } else revokeInfo[friend] = revInfo - senderWeight;
         }
@@ -490,13 +472,9 @@ contract TCKT is IERC721 {
 
             if (revokerW >= (revInfo & REVOKES_REMAINING_MASK)) {
                 revokeInfo[friend] = block.timestamp;
-                if (handleOf[uint160(friend)] != 0) {
-                    emit Transfer(
-                        friend,
-                        address(this),
-                        handleOf[uint160(friend)]
-                    );
-                    delete handleOf[uint160(friend)];
+                if (handleOf[friend] != 0) {
+                    emit Transfer(friend, address(this), handleOf[friend]);
+                    delete handleOf[friend];
                 }
             } else revokeInfo[friend] = revInfo - revokerW;
         }
@@ -510,7 +488,7 @@ contract TCKT is IERC721 {
     function addRevoker(uint256 deltaAndRevoker) external {
         address revoker = address(uint160(deltaAndRevoker));
         uint256 weight = revokerWeight[msg.sender][revoker] +
-            (deltaAndRevoker >> 160);
+            (deltaAndRevoker >> 160); // Checked addition
         revokerWeight[msg.sender][revoker] = weight;
         emit RevokerAssignment(msg.sender, revoker, weight);
     }

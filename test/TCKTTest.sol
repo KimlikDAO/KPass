@@ -163,6 +163,66 @@ contract TCKTTest is Test {
         assertEq(tckt.balanceOf(address(this)), 0);
     }
 
+    function testLastRevokeTimePreserved() public {
+        // Even someone get their private key stolen, the thief should not be
+        // able to reduce the `lastRevokeTime`.
+        tckt.createWithRevokers(
+            1337,
+            [
+                (uint256(7) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(4) << 160) | uint160(vm.addr(11)),
+                (uint256(5) << 160) | uint160(vm.addr(12)),
+                (uint256(6) << 160) | uint160(vm.addr(13)),
+                (uint256(7) << 160) | uint160(vm.addr(14))
+            ]
+        );
+        vm.expectRevert();
+        tckt.reduceRevokeThreshold(8);
+
+        vm.prank(vm.addr(10));
+        tckt.revokeFriend(address(this));
+
+        assertEq(tckt.revokesRemaining(), 4);
+
+        vm.warp(100);
+        vm.prank(vm.addr(12));
+        tckt.revokeFriend(address(this));
+
+        assertEq(tckt.revokesRemaining(), 0);
+        assertEq(tckt.lastRevokeTimestamp(address(this)), 100);
+
+        vm.warp(101);
+        vm.prank(vm.addr(13));
+        tckt.revokeFriend(address(this));
+
+        assertEq(tckt.revokesRemaining(), 0);
+        assertGe(tckt.lastRevokeTimestamp(address(this)), 100);
+
+        vm.warp(102);
+        vm.prank(vm.addr(14));
+        tckt.revokeFriend(address(this));
+
+        assertEq(tckt.revokesRemaining(), 0);
+        assertGe(tckt.lastRevokeTimestamp(address(this)), 100);
+
+        vm.warp(103);
+        tckt.createWithRevokers(
+            1337,
+            [
+                (uint256(7) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(4) << 160) | uint160(vm.addr(11)),
+                (uint256(5) << 160) | uint160(vm.addr(12)),
+                (uint256(6) << 160) | uint160(vm.addr(13)),
+                (uint256(7) << 160) | uint160(vm.addr(14))
+            ]
+        );
+        assertGe(tckt.lastRevokeTimestamp(address(this)), 100);
+    }
+
     function testReduceRevokeThreshold() public {
         uint256[5] memory revokers = [
             (uint256(1) << 192) | (uint256(1) << 160) | uint160(vm.addr(10)),
@@ -179,6 +239,9 @@ contract TCKTTest is Test {
         vm.prank(vm.addr(10));
         tckt.revokeFriend(address(this));
         assertEq(tckt.balanceOf(address(this)), 0);
+
+        vm.expectRevert();
+        tckt.reduceRevokeThreshold(1);
     }
 
     function testAddRevoker() public {
@@ -204,6 +267,36 @@ contract TCKTTest is Test {
         assertEq(tckt.balanceOf(address(this)), 0);
     }
 
+    function testRevokesRemaining() external {
+        uint256[5] memory revokers = [
+            (uint256(30) << 192) | (uint256(10) << 160) | uint160(vm.addr(10)),
+            (uint256(10) << 160) | uint160(vm.addr(11)),
+            (uint256(10) << 160) | uint160(vm.addr(12)),
+            (uint256(10) << 160) | uint160(vm.addr(13)),
+            (uint256(10) << 160) | uint160(vm.addr(14))
+        ];
+        tckt.createWithRevokers(123123123, revokers);
+        assertEq(tckt.balanceOf(address(this)), 1);
+        assertEq(tckt.revokesRemaining(), 30);
+
+        vm.prank(vm.addr(10));
+        tckt.revokeFriend(address(this));
+        assertEq(tckt.revokesRemaining(), 20);
+        assertEq(tckt.lastRevokeTimestamp(address(this)), 0);
+
+        vm.prank(vm.addr(11));
+        tckt.revokeFriend(address(this));
+        assertEq(tckt.revokesRemaining(), 10);
+        assertEq(tckt.lastRevokeTimestamp(address(this)), 0);
+
+        vm.warp(1337);
+        vm.prank(vm.addr(12));
+        tckt.revokeFriend(address(this));
+        assertEq(tckt.revokesRemaining(), 0);
+        assertEq(tckt.lastRevokeTimestamp(address(this)), 1337);
+        assertEq(tckt.balanceOf(address(this)), 0);
+    }
+
     function testAuthenticationPriceFeeder() public {
         vm.expectRevert();
         tckt.updatePrice((15 << 160) | uint160(vm.addr(1)));
@@ -220,6 +313,39 @@ contract TCKTTest is Test {
         vm.prank(OYLAMA);
         tckt.updatePricesBulk((1 << 128) + 1, prices);
         assertEq(uint128(tckt.priceIn(address(1337))), 17);
+    }
+
+    function testUpdatePrice() public {
+        vm.prank(OYLAMA);
+
+        tckt.updatePrice((131 << 160) | uint160(vm.addr(888)));
+        assertEq(uint128(tckt.priceIn(vm.addr(888))), 131);
+        assertEq(tckt.priceIn(vm.addr(888)) >> 128, uint256(131 * 3) / 2);
+    }
+
+    function testUpdatePricesBulk() public {
+        vm.prank(OYLAMA);
+        tckt.updatePricesBulk(
+            (uint256(7) << 128) | 5,
+            [
+                (uint256(5) << 160) | uint160(vm.addr(1)),
+                (uint256(6) << 160) | uint160(vm.addr(2)),
+                (uint256(7) << 160) | uint160(vm.addr(3)),
+                (uint256(8) << 160) | uint160(vm.addr(4)),
+                (uint256(9) << 160) | uint160(vm.addr(5))
+            ]
+        );
+
+        assertEq(uint128(tckt.priceIn(vm.addr(1))), 5);
+        assertEq(tckt.priceIn(vm.addr(1)) >> 128, 7);
+        assertEq(uint128(tckt.priceIn(vm.addr(2))), 6);
+        assertEq(tckt.priceIn(vm.addr(2)) >> 128, 8);
+        assertEq(uint128(tckt.priceIn(vm.addr(3))), 7);
+        assertEq(tckt.priceIn(vm.addr(3)) >> 128, 9);
+        assertEq(uint128(tckt.priceIn(vm.addr(4))), 8);
+        assertEq(tckt.priceIn(vm.addr(4)) >> 128, 11);
+        assertEq(uint128(tckt.priceIn(vm.addr(5))), 9);
+        assertEq(tckt.priceIn(vm.addr(5)) >> 128, 12);
     }
 
     function testCreate() public {
