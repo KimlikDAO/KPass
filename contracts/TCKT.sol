@@ -14,13 +14,19 @@ struct Signature {
 
 /**
  * @title KimlikDAO TCKT contract.
+ *
+ * TCKT is a non-transferable ID NFT, compliant with the ERC721 interface. The
+ * transfer methods revert. The token URIs point to KimlikDAO protocol ipfs
+ * endpoints and the metadata contents implement ERC721Unlockable, which is
+ * a novel extension of ERC721Metadata.
+ *
  * @author KimlikDAO
  */
 contract TCKT is IERC721 {
     mapping(address => uint256) public handleOf;
 
     function name() external pure override returns (string memory) {
-        return "KimlikDAO TC Kimlik Tokeni";
+        return "KimlikDAO Kimlik Tokeni";
     }
 
     function symbol() external pure override returns (string memory) {

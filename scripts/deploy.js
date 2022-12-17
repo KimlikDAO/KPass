@@ -14,7 +14,7 @@ const JsonRpcUrls = {
   "0xa86a": ["api.avax.network/ext/bc/C/rpc", "Avalanche"],
   "0x89": ["polygon-rpc.com", "Polygon"],
   "0xa4b1": ["arb1.arbitrum.io/rpc", "Arbitrum"],
-  "0x38": ["bsc-dataseed.binance.org", "BNB Chain"],
+  "0x38": ["bscrpc.com", "BNB Chain"],
   "0x406": ["evm.confluxrpc.com", "Conflux eSpace"],
   "0xfa": ["rpc.ankr.com/fantom", "Fantom"],
 }
@@ -33,6 +33,9 @@ const readSources = (sourceNames) => Object.fromEntries(
   }])
 )
 
+/** @const {string} */
+const DOMAIN_SEPARATOR = "0x7fac9a4ba27a28c432ccad9cad6a299334875c9ce9801df0d292862b0d4f51cb";
+
 /**
  * @param {!Object<string, !SourceFile>} sources
  * @param {string} chainId
@@ -44,11 +47,6 @@ const processSources = (sources, chainId, deployerAddress) => {
     from: deployerAddress,
     nonce: 0
   });
-  // Yerli ve milli
-  if (!deployedAddress.startsWith("0xcCc") || !deployedAddress.endsWith("cCc")) {
-    console.error("Deployed contract address failed check-sum. Check private key");
-    process.exit(1);
-  }
   const domainSeparator = ethers.utils._TypedDataEncoder.hashDomain({
     name: 'TCKT',
     version: '1',
@@ -58,12 +56,11 @@ const processSources = (sources, chainId, deployerAddress) => {
   let file = sources["TCKT.sol"].content;
   console.log(`${chainId}\tDOMAIN_SEPARATOR() = ${domainSeparator}`);
 
-  const avalancheDomainSeparator = "0x7fac9a4ba27a28c432ccad9cad6a299334875c9ce9801df0d292862b0d4f51cb";
-  if (!file.includes(avalancheDomainSeparator)) {
+  if (!file.includes(DOMAIN_SEPARATOR)) {
     console.error("TCKT.sol does not have the right DOMAIN_SEPARATOR");
     process.exit(1);
   }
-  file = file.replace(avalancheDomainSeparator, domainSeparator);
+  file = file.replace(DOMAIN_SEPARATOR, domainSeparator);
   if (chainId != "0xa86a")
     file = file.slice(0, file.indexOf("// Exposure report") - 92) + "}";
   sources["TCKT.sol"].content = file;
@@ -124,7 +121,6 @@ const deployToChain = (chainId, wallet) => {
 
 const Foundry = parse(readFileSync("foundry.toml")).profile.default;
 
-
 /**
  * @param {string} privKey
  */
@@ -134,6 +130,11 @@ const deployToAllChains = (privKey) => {
     from: wallet.address,
     nonce: 0
   });
+  // Yerli ve milli
+  if (!deployedAddress.startsWith("0xcCc") || !deployedAddress.endsWith("cCc")) {
+    console.error("Deployed contract address failed check-sum. Check private key");
+    process.exit(1);
+  }
   console.log(
     "        TCKT Deployment\n" +
     "        -----------------\n" +

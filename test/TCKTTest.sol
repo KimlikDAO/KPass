@@ -6,6 +6,7 @@ import "forge-std/Test.sol";
 import "interfaces/Addresses.sol";
 import "interfaces/AvalancheTokens.sol";
 import "interfaces/testing/MockTokens.sol";
+import {IERC165} from "interfaces/IERC165.sol";
 import {IERC20Permit} from "interfaces/IERC20Permit.sol";
 import {Signature, TCKT} from "contracts/TCKT.sol";
 
@@ -303,10 +304,15 @@ contract TCKTTest is Test {
         tckt.createWithRevokers(123123123, revokers);
         assertEq(tckt.balanceOf(address(this)), 1);
         assertEq(tckt.revokesRemaining(), 30);
+        assertEq(tckt.revokerWeight(address(this), vm.addr(10)), 10);
+        assertEq(tckt.revokerWeight(address(this), vm.addr(11)), 10);
+        assertEq(tckt.revokerWeight(address(this), vm.addr(12)), 10);
+        assertEq(tckt.revokerWeight(address(this), vm.addr(13)), 10);
 
         vm.prank(vm.addr(10));
         tckt.revokeFriend(address(this));
         assertEq(tckt.revokesRemaining(), 20);
+        assertEq(tckt.revokerWeight(address(this), vm.addr(10)), 0);
         assertEq(tckt.lastRevokeTimestamp(address(this)), 0);
 
         vm.prank(vm.addr(11));
@@ -564,5 +570,12 @@ contract TCKTTest is Test {
             tckt.CREATE_FOR_TYPEHASH(),
             keccak256("CreateFor(uint256 handle)")
         );
+    }
+
+    function testViewFunctions() external {
+        tckt.create(0x1337ACC);
+        assertEq(tckt.handleOf(address(this)), 0x1337ACC);
+        assertEq(tckt.balanceOf(address(this)), 1);
+        assertTrue(tckt.supportsInterface(type(IERC165).interfaceId));
     }
 }

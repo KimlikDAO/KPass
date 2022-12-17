@@ -317,7 +317,10 @@ contract TCKTSignersTest is Test {
         assertEq(tcktSigners.allowance(address(this), address(this)), 0);
         assertFalse(tcktSigners.transfer(address(this), 1));
 
-        assertEq(tcktSigners.totalSupply(), tcko.balanceOf(address(tcktSigners)));
+        assertEq(
+            tcktSigners.totalSupply(),
+            tcko.balanceOf(address(tcktSigners))
+        );
         assertEq(tcktSigners.decimals(), tcko.decimals());
     }
 }
