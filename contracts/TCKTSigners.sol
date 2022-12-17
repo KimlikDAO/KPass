@@ -13,7 +13,7 @@ import {OYLAMA, TCKO_ADDR} from "interfaces/Addresses.sol";
  *
  *   O: Never been a signer before.
  *   S: Staked the required amount, and is an active signer.
- *   U: A signer started the unstake process, and no longer a valid signer,
+ *   U: A signer started the unstake process, and is no longer a valid signer,
  *      but hasn't collected their staked TCKOs (plus excess) yet.
  *   F: A former signer which the `TCKTSigners` contract does not owe any
  *      TCKOs to. A signer ends up in this state either by getting slashed
@@ -39,9 +39,10 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     event SignersNeededChange(uint256 signersCount);
 
     /**
-     * The amount of TCKTs a node must stake before they can be voted as a
+     * The amount of TCKOs a node must stake before they can be voted as a
      * signer node. Note approving this amount for staking is a necessary first
-     * step to be a signer, but not nearly sufficient.
+     * step to be a signer, but not nearly sufficient. The signer node operator
+     * is vetted by the DAO and voted for approval.
      *
      * The initial value is 1M TCKOs and the value is determined by DAO vote
      * thereafter via the `setStakingDeposit()` method.
@@ -55,24 +56,24 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     uint256 public signersNeeded = 3;
 
     /**
-     * Maps a slashing event number to a bitpacked struct.
+     * Maps a jointDeposit event number to a bitpacked struct.
      *
      * cumRate: How many TCKOs may be withdrawn for every 2^128 TCKOs staked at
      *          the very beginning of this contract. While this tracks the
      *          cumulative rate for the initial signers, any other signer's
      *          cumulative rate can be calculated as a difference of two
      *          cumRate's. See `balanceOf()`.
-     * timestamp: The block.timestamp of the block where the slashing occurred
+     * timestamp: The block.timestamp of the block where the jointDeposit
+     *            occurred.
      *
      * |--  cumRate --|---- timestamp ----|
-     * |--    192   --|----    64     ----|
+     * |--   192    --|----    64     ----|
      *
      */
     mapping(uint256 => uint256) private jointDeposits;
 
     /**
-     * The number of times `jointDeposit()` has been called, thereby giving
-     * TCKOs to active signers proportinal to their TCKO-st stake.
+     * The number of items in the `jointDeposits` mapping.
      */
     uint256 private jointDepositCount;
 
@@ -112,9 +113,9 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * Returns the TCKO-st balance of a given address.
      *
      * Note the balance of an account may increase without ever a `Transfer`
-     * event firing for this account. This happens after a `jointDeposit()`,
-     * which in turn may happen due a slashed signer or someone donating TCKOs
-     * to all active signers (donated TCKOs turn into TCKO-st automatically).
+     * event firing for this account. This happens after a `jointDeposit()`
+     * or a slasing event, which distributes all the slashed TCKOs to active
+     * signers proportional to their initial stake.
      *
      * @param addr Address of the account whose balance is queried.
      * @return The amount of TCKO-st tokens the address have.
@@ -183,7 +184,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
 
     /**
      * Deposits an amount of TCKOs to each signer proportional to their initial
-     * TCKO contribution.
+     * TCKO stake.
      *
      * The sender must have approved this amount of TCKOs for use by the
      * TCKTSigners contract beforehand.
@@ -214,7 +215,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * Can only be set by the DAO vote, that is, the `OYLAMA` contract.
      *
      * Note the existing signers are not affected by a stakingDeposit change;
-     * only the new signers are subjected to the new staking amount.
+     * only new signers are subjected to the new staking amount.
      *
      * @param stakeAmount the amount required to be a signer node.
      */
@@ -268,11 +269,11 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     }
 
     /**
-     * A signer node may unstake their deposit at any time they wish; doing so
+     * A signer node may unstake their balance at any time they wish; doing so
      * removes their address from the valid signer list immediately.
      *
-     * They can get their staked TCKOs back by calling the `withdraw()` method
-     * after 30 days.
+     * They can get their portion of the TCKOs back by calling the `withdraw()`
+     * method after 30 days.
      *
      *   S ----`unstake()`----------------> U
      *
@@ -294,8 +295,8 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     }
 
     /**
-     * This method returns back the staked TCKOs (plus excess) to its owner 30
-     * days after the owner unstakes.
+     * Returns back the staked TCKOs (plus excess) to its owner.
+     * May only be called 30 days after an `unstake()`.
      *
      *   U ----`withdraw()`---------------> F     30 days after `unstake()`
      *
