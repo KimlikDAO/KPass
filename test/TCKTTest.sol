@@ -97,7 +97,7 @@ contract TCKTTest is Test {
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
-                DOMAIN_SEPARATOR,
+                tckt.DOMAIN_SEPARATOR(),
                 keccak256(
                     abi.encode(REVOKE_FRIEND_FOR_TYPEHASH, vm.addr(0x1337ACC))
                 )
@@ -147,7 +147,7 @@ contract TCKTTest is Test {
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
-                DOMAIN_SEPARATOR,
+                tckt.DOMAIN_SEPARATOR(),
                 keccak256(
                     abi.encode(REVOKE_FRIEND_FOR_TYPEHASH, vm.addr(0x1337ACC))
                 )
@@ -489,9 +489,6 @@ contract TCKTTest is Test {
         }
     }
 
-    bytes32 DOMAIN_SEPARATOR =
-        0x8730afd3d29f868d9f7a9e3ec19e7635e9cf9802980a4a5c5ac0b443aea5fbd8;
-
     // keccak256("CreateFor(uint256 handle)")
     bytes32 CREATE_FOR_TYPEHASH =
         0xe0b70ef26ac646b5fe42b7831a9d039e8afa04a2698e03b3321e5ca3516efe70;
@@ -504,7 +501,7 @@ contract TCKTTest is Test {
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
-                DOMAIN_SEPARATOR,
+                tckt.DOMAIN_SEPARATOR(),
                 keccak256(abi.encode(CREATE_FOR_TYPEHASH, handle))
             )
         );

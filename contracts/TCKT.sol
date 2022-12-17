@@ -259,7 +259,7 @@ contract TCKT is IERC721 {
     //     )
     // );
     bytes32 public constant DOMAIN_SEPARATOR =
-        0x8730afd3d29f868d9f7a9e3ec19e7635e9cf9802980a4a5c5ac0b443aea5fbd8;
+        0x7fac9a4ba27a28c432ccad9cad6a299334875c9ce9801df0d292862b0d4f51cb;
 
     // keccak256("CreateFor(uint256 handle)")
     bytes32 public constant CREATE_FOR_TYPEHASH =

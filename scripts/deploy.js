@@ -44,8 +44,10 @@ const processSources = (sources, chainId, deployerAddress) => {
     nonce: 0
   });
   // Yerli ve milli
-  if (!deployedAddress.startsWith("0xcCc") || !deployedAddress.endsWith("cCc"))
+  if (!deployedAddress.startsWith("0xcCc") || !deployedAddress.endsWith("cCc")) {
+    console.error("Deployed contract address failed check-sum. Check private key");
     process.exit(1);
+  }
   const domainSeparator = ethers.utils._TypedDataEncoder.hashDomain({
     name: 'TCKT',
     version: '1',
@@ -53,9 +55,13 @@ const processSources = (sources, chainId, deployerAddress) => {
     verifyingContract: deployedAddress
   });
   let file = sources["TCKT.sol"].content;
-  file = file.replace(
-    "0x8730afd3d29f868d9f7a9e3ec19e7635e9cf9802980a4a5c5ac0b443aea5fbd8",
-    domainSeparator);
+  console.log(domainSeparator);
+  const avalancheDomainSeparator = "0x7fac9a4ba27a28c432ccad9cad6a299334875c9ce9801df0d292862b0d4f51cb";
+  if (!file.includes(avalancheDomainSeparator)) {
+    console.error("TCKT.sol does not have the right DOMAIN_SEPARATOR");
+    process.exit(1);
+  }
+  file = file.replace(avalancheDomainSeparator, domainSeparator);
   if (chainId != "0xa86a")
     file = file.slice(0, file.indexOf("// Exposure report") - 92) + "}";
   sources["TCKT.sol"].content = file;
@@ -106,10 +112,14 @@ const deployToChain = (chainId, privKey) => {
     }
   }
   const factory = new ethers.ContractFactory(TCKT.abi, TCKT.evm.bytecode.object, wallet);
-  console.log(factory);
+  const deployTransaction = factory.getDeployTransaction();
+  const estimatedGas = provider.estimateGas(deployTransaction.data);
+  estimatedGas.then((estimate) => {
+    console.log(estimate.toBigInt());
+  })
 }
 
 const Foundry = parse(readFileSync("foundry.toml")).profile.default;
 
-deployToChain("0x1",
+deployToChain("0xa86a",
   process.argv[2] || "32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33");
