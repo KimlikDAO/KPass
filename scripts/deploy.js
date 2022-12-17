@@ -72,13 +72,12 @@ const processSources = (sources, chainId, deployerAddress) => {
 
 /**
  * @param {string} chainId
- * @param {string} privKey
+ * @param {!ethers.Wallet} wallet
  */
-const deployToChain = (chainId, privKey) => {
+const deployToChain = (chainId, wallet) => {
   /** @const {!ethers.Provider} */
   const provider = new ethers.providers.JsonRpcProvider("https://" + JsonRpcUrls[chainId][0]);
-  /** @const {!ethers.Wallet} */
-  const wallet = new ethers.Wallet(privKey, provider);
+  wallet.connect(provider);
 
   const compilerInput = {
     language: "Solidity",
@@ -115,14 +114,34 @@ const deployToChain = (chainId, privKey) => {
   }
   const factory = new ethers.ContractFactory(TCKT.abi, TCKT.evm.bytecode.object, wallet);
   const deployTransaction = factory.getDeployTransaction();
-  const estimatedGas = provider.estimateGas(deployTransaction.data);
-  estimatedGas.then((estimate) => {
-    console.log(`${chainId}\t\tgas: ${estimate.toBigInt()}`);
-  })
+  const gasPromise = provider.estimateGas(deployTransaction.data);
+  const gasPricePromise = provider.getGasPrice();
+  Promise.all([gasPromise, gasPricePromise])
+    .then(([gas, gasPrice]) => {
+      console.log(`${chainId}\t\tgas: ${gas.toBigInt()} x ${ethers.utils.formatUnits(gasPrice, "gwei")} gwei`);
+    })
 }
 
 const Foundry = parse(readFileSync("foundry.toml")).profile.default;
 
-Object.keys(JsonRpcUrls).forEach((chainId) =>
-  deployToChain(chainId,
-    process.argv[2] || "32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33"));
+
+/**
+ * @param {string} privKey
+ */
+const deployToAllChains = (privKey) => {
+  const wallet = new ethers.Wallet(privKey);
+  const deployedAddress = ethers.utils.getContractAddress({
+    from: wallet.address,
+    nonce: 0
+  });
+  console.log(
+    "        TCKT Deployment\n" +
+    "        -----------------\n" +
+    `        Deployer address: ${wallet.address}\n` +
+    `        Deployed address: ${deployedAddress}\n\n`);
+  Object.keys(JsonRpcUrls).forEach((chainId) =>
+    deployToChain(chainId, wallet));
+}
+
+deployToAllChains(
+  process.argv[2] || "32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33");
