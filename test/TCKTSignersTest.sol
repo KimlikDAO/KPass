@@ -30,14 +30,16 @@ contract TCKTSignersTest is Test {
 
     function testAuthorization() external {
         vm.expectRevert();
-        tcktSigners.setStakingDeposit(1e12);
+        tcktSigners.setStakingDeposit(2e12);
         vm.prank(OYLAMA);
-        tcktSigners.setStakingDeposit(1e12);
+        tcktSigners.setStakingDeposit(2e12);
+        assertEq(tcktSigners.stakingDeposit(), 2e12);
 
         vm.expectRevert();
         tcktSigners.setSignersNeeded(5);
         vm.prank(OYLAMA);
         tcktSigners.setSignersNeeded(5);
+        assertEq(tcktSigners.signersNeeded(), 5);
 
         vm.expectRevert();
         tcktSigners.approveSignerNode(vm.addr(2));
@@ -274,5 +276,48 @@ contract TCKTSignersTest is Test {
             expected1 - 15e12 - uint256(10e12) / 3,
             5
         );
+    }
+
+    function testDepositBalanceOf() external {
+        prepareSigners();
+        vm.prank(OYLAMA);
+        tcktSigners.approveSignerNode(vm.addr(1));
+        assertEq(
+            tcktSigners.depositBalanceOf(vm.addr(1)),
+            tcktSigners.stakingDeposit()
+        );
+
+        vm.warp(100);
+        vm.prank(OYLAMA);
+        tcktSigners.approveSignerNode(vm.addr(2));
+        vm.warp(101);
+        vm.prank(OYLAMA);
+        tcktSigners.slashSignerNode(vm.addr(2));
+        assertEq(tcktSigners.depositBalanceOf(vm.addr(1)), 1e12);
+        assertEq(tcktSigners.depositBalanceOf(vm.addr(2)), 1e12);
+        assertEq(tcktSigners.balanceOf(vm.addr(1)), 2e12);
+        assertEq(tcktSigners.balanceOf(vm.addr(2)), 0);
+    }
+
+    function testStakedToken() external {
+        prepareSigners();
+        vm.prank(OYLAMA);
+        tcktSigners.approveSignerNode(vm.addr(1));
+        assertEq(
+            tcko.balanceOf(address(tcktSigners)),
+            tcktSigners.stakingDeposit()
+        );
+        vm.prank(OYLAMA);
+        tcktSigners.approveSignerNode(vm.addr(2));
+        assertEq(
+            tcko.balanceOf(address(tcktSigners)),
+            2 * tcktSigners.stakingDeposit()
+        );
+        assertFalse(tcktSigners.approve(address(this), 0));
+        assertEq(tcktSigners.allowance(address(this), address(this)), 0);
+        assertFalse(tcktSigners.transfer(address(this), 1));
+
+        assertEq(tcktSigners.totalSupply(), tcko.balanceOf(address(tcktSigners)));
+        assertEq(tcktSigners.decimals(), tcko.decimals());
     }
 }

@@ -554,4 +554,15 @@ contract TCKTTest is Test {
             tckt.createFor(123123123, createSig, deadlineAndToken, paymentSig);
         }
     }
+
+    function testTypeHashes() external {
+        assertEq(
+            tckt.REVOKE_FRIEND_FOR_TYPEHASH(),
+            keccak256("RevokeFriendFor(address friend)")
+        );
+        assertEq(
+            tckt.CREATE_FOR_TYPEHASH(),
+            keccak256("CreateFor(uint256 handle)")
+        );
+    }
 }
