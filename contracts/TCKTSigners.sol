@@ -329,23 +329,24 @@ contract TCKTSigners is IDIDSigners, IERC20 {
         uint256 info = signerInfo[addr];
         unchecked {
             uint256 slashAmount = balanceOf(addr);
-            uint256 signerBalanceLeft = signerDepositBalance -
-                uint64(info >> 64);
-            signerDepositBalance = signerBalanceLeft;
+            uint256 signerBalanceLeft = signerDepositBalance;
+            // The case `state(addr) == S`
+            if (info != 0 && info & END_TS_MASK == 0) {
+                signerInfo[addr] = (block.timestamp << 128) | info;
+                signerBalanceLeft -= uint64(info >> 64);
+                signerDepositBalance = signerBalanceLeft;
+            } else {
+                // The case `state(addr) == U`
+                require(info >> 192 != 0);
+                signerInfo[addr] = uint192(info); // Zero-out toWithdraw
+            }
             uint256 n = jointDepositCount;
             uint256 cumRate = jointDeposits[n] >> 64;
             jointDeposits[n + 1] =
                 ((((slashAmount << 128) / signerBalanceLeft) + cumRate) << 64) |
                 block.timestamp;
             jointDepositCount = n + 1;
-            // The case `state(addr) == S`
-            if (info != 0 && info & END_TS_MASK == 0) {
-                signerInfo[addr] = (block.timestamp << 128) | info;
-            } else {
-                // The case `state(addr) == U`
-                require(info >> 192 != 0);
-                signerInfo[addr] = uint192(info); // Zero-out toWithdraw
-            }
+
             emit SignerNodeSlash(addr, slashAmount);
             emit SignerNodeLeave(addr, block.timestamp);
             emit Transfer(addr, address(this), slashAmount);

@@ -131,6 +131,7 @@ contract TCKTSignersTest is Test {
         tcktSigners.unstake();
         vm.warp(200);
         vm.prank(OYLAMA);
+        tcktSigners.slashSignerNode(vm.addr(1));
     }
 
     function testBalanceOf() external {
