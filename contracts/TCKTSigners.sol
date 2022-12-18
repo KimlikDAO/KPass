@@ -56,13 +56,21 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     uint256 public signersNeeded = 3;
 
     /**
+     * The cumulative rate calculations are done as a multiple of this 80-bit
+     * number and then divided by it at the end of the calculation. This
+     * minimizes rounding errors, especially for numbers with prime factors
+     * 2, 5, 3, 7, which we care about the most.
+     */
+    uint256 constant CUM_RATE_MULTIPLIER = (10**15) * (3**10) * (7**5);
+
+    /**
      * Maps a jointDeposit event number to a bitpacked struct.
      *
-     * cumRate: How many TCKOs may be withdrawn for every 2^128 TCKOs staked at
-     *          the very beginning of this contract. While this tracks the
-     *          cumulative rate for the initial signers, any other signer's
-     *          cumulative rate can be calculated as a difference of two
-     *          cumRate's. See `balanceOf()`.
+     * cumRate: How many TCKOs may be withdrawn for every CUM_RATE_MULTIPLIER
+     *          many TCKOs staked at the very beginning of this contract. While
+     *          this tracks the cumulative rate for the initial signers, any
+     *          other signer's cumulative rate can be calculated as a difference
+     *          of two cumRate's. See `balanceOf()`.
      * timestamp: The block.timestamp of the block where the jointDeposit
      *            occurred.
      *
@@ -139,8 +147,9 @@ contract TCKTSigners is IDIDSigners, IERC20 {
                 ? jointDeposits[n]
                 : jointDeposits[n] - jointDeposits[r];
             return
-                (uint64(info >> 64) * ((1 << 128) + (cumulativeRate >> 64))) >>
-                128;
+                (uint64(info >> 64) *
+                    (CUM_RATE_MULTIPLIER + (cumulativeRate >> 64))) /
+                CUM_RATE_MULTIPLIER;
         }
     }
 
@@ -197,7 +206,8 @@ contract TCKTSigners is IDIDSigners, IERC20 {
             uint256 n = jointDepositCount;
             uint256 cumRate = jointDeposits[n] >> 64;
             jointDeposits[n + 1] =
-                ((((amount << 128) / signerDepositBalance) + cumRate) << 64) |
+                ((((CUM_RATE_MULTIPLIER * amount) / signerDepositBalance) +
+                    cumRate) << 64) |
                 block.timestamp;
             jointDepositCount = n + 1;
         }
@@ -343,7 +353,8 @@ contract TCKTSigners is IDIDSigners, IERC20 {
             uint256 n = jointDepositCount;
             uint256 cumRate = jointDeposits[n] >> 64;
             jointDeposits[n + 1] =
-                ((((slashAmount << 128) / signerBalanceLeft) + cumRate) << 64) |
+                ((((CUM_RATE_MULTIPLIER * slashAmount) / signerBalanceLeft) +
+                    cumRate) << 64) |
                 block.timestamp;
             jointDepositCount = n + 1;
 
