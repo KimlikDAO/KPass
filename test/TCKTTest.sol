@@ -495,6 +495,44 @@ contract TCKTTest is Test {
         }
     }
 
+    function testUnsupportedTokenPayment() external {
+        DeployMockTokens();
+        vm.prank(OYLAMA);
+        // Set TCKT price to 4 YUSD
+        tckt.updatePrice((4e6 << 160) | uint160(address(YUSD)));
+
+        vm.prank(USDT_DEPLOYER);
+        USDT.transfer(vm.addr(0x1337ACC), 15e6);
+
+        uint256 deadline = block.timestamp + 1200;
+        Signature memory sig = authorizePayment(USDT, 6e6, deadline, 0);
+
+        vm.prank(vm.addr(0x1337ACC));
+        uint256 deadlineAndToken = (deadline << 160) | uint160(address(USDT));
+        vm.expectRevert();
+        tckt.createWithTokenPermit(123123123, deadlineAndToken, sig);
+    }
+
+    function testInvalidSpendSignature() external {
+        DeployMockTokens();
+        vm.prank(OYLAMA);
+        // Set TCKT price to 4 YUSD
+        tckt.updatePrice((4e6 << 160) | uint160(address(YUSD)));
+
+        vm.prank(YUSD_DEPLOYER);
+        YUSD.transfer(vm.addr(0x1337ACC), 15e6);
+
+        uint256 deadline = block.timestamp + 1200;
+        Signature memory sig = authorizePayment(YUSD, 6e6, deadline, 0);
+        // Break the signature
+        sig.yParityAndS -= 1;
+
+        vm.prank(vm.addr(0x1337ACC));
+        uint256 deadlineAndToken = (deadline << 160) | uint160(address(YUSD));
+        vm.expectRevert();
+        tckt.createWithTokenPermit(123123123, deadlineAndToken, sig);
+    }
+
     function testApproveAndCreate() external {
         DeployMockTokens();
 
