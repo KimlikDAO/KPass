@@ -282,10 +282,10 @@ contract TCKT is IERC721 {
      * wherein the gas fee is covered by the KimlikDAO gas station.
      *
      * @param handle           IPFS handle with which to create the TCKT.
-     * @param createSig        Signature from the sender for creating a TCKT.
+     * @param createSig        Signature endorsing the TCKT creation.
      * @param deadlineAndToken The payment token and the deadline for the token
      *                         permit signature.
-     * @param paymentSig       Token spend permission from the sender.
+     * @param paymentSig       Token spend permission from the TCKT creator.
      */
     function createFor(
         uint256 handle,

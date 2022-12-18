@@ -495,6 +495,59 @@ contract TCKTTest is Test {
         }
     }
 
+    function testApproveAndCreate() external {
+        DeployMockTokens();
+
+        vm.prank(OYLAMA);
+        // Set TCKT price to 2 USDT
+        tckt.updatePrice((2e6 << 160) | uint160(address(USDT)));
+
+        vm.prank(USDT_DEPLOYER);
+        USDT.transfer(vm.addr(0x1337ACC), 10e6);
+
+        vm.startPrank(vm.addr(0x1337ACC));
+        USDT.approve(address(tckt), 1e6);
+        vm.expectRevert();
+        tckt.createWithRevokersWithTokenPayment(
+            123123123,
+            [
+                (uint256(1) << 192) |
+                    (uint256(1) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(1) << 160) | uint160(vm.addr(11)),
+                (uint256(1) << 160) | uint160(vm.addr(12)),
+                (uint256(1) << 160) | uint160(vm.addr(13)),
+                (uint256(1) << 160) | uint160(vm.addr(14))
+            ],
+            USDT
+        );
+
+        USDT.approve(address(tckt), 2e6);
+        tckt.createWithRevokersWithTokenPayment(
+            123123123,
+            [
+                (uint256(1) << 192) |
+                    (uint256(1) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(1) << 160) | uint160(vm.addr(11)),
+                (uint256(1) << 160) | uint160(vm.addr(12)),
+                (uint256(1) << 160) | uint160(vm.addr(13)),
+                (uint256(1) << 160) | uint160(vm.addr(14))
+            ],
+            USDT
+        );
+
+        assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
+        assertEq(USDT.balanceOf(vm.addr(0x1337ACC)), 8e6);
+
+        USDT.approve(address(tckt), 2e6);
+        vm.expectRevert();
+        tckt.createWithTokenPayment(123123123, USDT);
+
+        USDT.approve(address(tckt), 3e6);
+        tckt.createWithTokenPayment(123123123, USDT);
+    }
+
     // keccak256("CreateFor(uint256 handle)")
     bytes32 CREATE_FOR_TYPEHASH =
         0xe0b70ef26ac646b5fe42b7831a9d039e8afa04a2698e03b3321e5ca3516efe70;
