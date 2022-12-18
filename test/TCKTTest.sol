@@ -578,4 +578,137 @@ contract TCKTTest is Test {
         assertEq(tckt.balanceOf(address(this)), 1);
         assertTrue(tckt.supportsInterface(type(IERC165).interfaceId));
     }
+
+    event RevokerAssignment(
+        address indexed owner,
+        address indexed revoker,
+        uint256 weight
+    );
+
+    function testCreateWithRevokers() external {
+        vm.expectEmit(true, true, false, true, address(tckt));
+        emit RevokerAssignment(address(this), vm.addr(10), 3);
+        emit RevokerAssignment(address(this), vm.addr(11), 4);
+        emit RevokerAssignment(address(this), vm.addr(12), 5);
+        tckt.createWithRevokers(
+            0x1337cCc0,
+            [
+                (uint256(7) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(4) << 160) | uint160(vm.addr(11)),
+                (uint256(5) << 160) | uint160(vm.addr(12)),
+                0,
+                0
+            ]
+        );
+        assertEq(tckt.revokerWeight(address(this), vm.addr(10)), 3);
+        assertEq(tckt.revokerWeight(address(this), vm.addr(11)), 4);
+        assertEq(tckt.revokerWeight(address(this), vm.addr(12)), 5);
+
+        vm.expectRevert();
+        tckt.createWithRevokers(
+            0x1337cCc0,
+            [
+                (uint256(7) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(4) << 160) | uint160(vm.addr(11)),
+                0,
+                0,
+                0
+            ]
+        );
+        vm.expectRevert();
+        tckt.createWithRevokers(
+            0x1337cCc0,
+            [
+                (uint256(7) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(vm.addr(10)),
+                0,
+                0,
+                0,
+                0
+            ]
+        );
+        vm.expectRevert();
+        tckt.createWithRevokers(
+            0x1337cCc0,
+            [
+                (uint256(7) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(4) << 160) | uint160(vm.addr(11)),
+                (uint256(5) << 160) | uint160(vm.addr(11)),
+                0,
+                0
+            ]
+        );
+        vm.expectRevert();
+        tckt.createWithRevokers(
+            0x1337cCc0,
+            [
+                (uint256(7) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(4) << 160) | uint160(vm.addr(10)),
+                (uint256(5) << 160) | uint160(vm.addr(11)),
+                0,
+                0
+            ]
+        );
+        vm.expectRevert();
+        tckt.createWithRevokers(
+            0x1337cCc0,
+            [
+                (uint256(7) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(4) << 160) | uint160(vm.addr(11)),
+                (uint256(5) << 160) | uint160(vm.addr(10)),
+                0,
+                0
+            ]
+        );
+        vm.expectRevert();
+        tckt.createWithRevokers(
+            0x1337cCc0,
+            [
+                (uint256(7) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(address(this)),
+                (uint256(4) << 160) | uint160(vm.addr(11)),
+                (uint256(5) << 160) | uint160(vm.addr(12)),
+                0,
+                0
+            ]
+        );
+        vm.expectRevert();
+        tckt.createWithRevokers(
+            0x1337cCc0,
+            [
+                (uint256(7) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(4) << 160) | uint160(address(this)),
+                (uint256(5) << 160) | uint160(vm.addr(12)),
+                0,
+                0
+            ]
+        );
+        vm.expectRevert();
+        tckt.createWithRevokers(
+            0x1337cCc0,
+            [
+                (uint256(7) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(vm.addr(10)),
+                (uint256(4) << 160) | uint160(vm.addr(11)),
+                (uint256(5) << 160) | uint160(address(this)),
+                0,
+                0
+            ]
+        );
+    }
 }

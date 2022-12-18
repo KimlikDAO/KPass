@@ -13,6 +13,8 @@ contract TCKTIntegrationTest is Test {
     TCKT private tckt;
     TCKTSigners private tcktSigners;
 
+    event ExposureReport(bytes32 indexed exposureReportID, uint64 timestamp);
+
     function setUp() public {
         vm.prank(TCKT_DEPLOYER);
         tckt = new TCKT();
@@ -112,6 +114,8 @@ contract TCKTIntegrationTest is Test {
             130,
             [sigs[0], sigs[0], sigs[1]]
         );
+        vm.expectEmit(true, true, true, true, address(tckt));
+        emit ExposureReport(bytes32(uint256(123)), uint64(130));
         tckt.reportExposure(
             bytes32(uint256(123)),
             130,

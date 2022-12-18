@@ -40,15 +40,16 @@ const readSources = (sourceNames) => Object.fromEntries(
  * @param {string} chainId
  * @param {string} deployerAddress
  */
-const computeDomainSeparator = (chainId, deployerAddress) => ethers.utils._TypedDataEncoder.hashDomain({
-  name: 'TCKT',
-  version: '1',
-  chainId,
-  verifyingContract: ethers.utils.getContractAddress({
-    from: deployerAddress,
-    nonce: 0
-  })
-});
+const computeDomainSeparator = (chainId, deployerAddress) =>
+  ethers.utils._TypedDataEncoder.hashDomain({
+    name: 'TCKT',
+    version: '1',
+    chainId,
+    verifyingContract: ethers.utils.getContractAddress({
+      from: deployerAddress,
+      nonce: 0
+    })
+  });
 
 /**
  * @param {!Object<string, !SourceFile>} sources
@@ -142,7 +143,8 @@ const deployToChain = (chainId, privKey) => {
       const gasPricePromise = provider.getGasPrice();
       Promise.all([gasPromise, gasPricePromise])
         .then(([gas, gasPrice]) => {
-          console.log(`${chainId}\t\tgas: ${gas.toBigInt()} x ${ethers.utils.formatUnits(gasPrice, "gwei")} gwei`);
+          const gasPriceStr = ethers.utils.formatUnits(gasPrice, "gwei");
+          console.log(`${chainId}\t\tgas: ${gas.toBigInt()} x ${gasPriceStr} gwei`);
         })
     })
 }
