@@ -118,7 +118,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * signers proportional to their initial stake.
      *
      * @param addr Address of the account whose balance is queried.
-     * @return The amount of TCKO-st tokens the address have.
+     * @return The amount of TCKO-st tokens the address has.
      */
     function balanceOf(address addr) public view returns (uint256) {
         uint256 info = signerInfo[addr];

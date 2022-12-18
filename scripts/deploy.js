@@ -8,13 +8,16 @@ import { parse } from "toml";
  */
 let SourceFile;
 
+/** @const {string} */
+const DOMAIN_SEPARATOR = "0x7fac9a4ba27a28c432ccad9cad6a299334875c9ce9801df0d292862b0d4f51cb";
+
 /** @type {!Object<string, !Array<string>>} */
 const JsonRpcUrls = {
   "0x1": ["cloudflare-eth.com", "Ethereum"],
   "0xa86a": ["api.avax.network/ext/bc/C/rpc", "Avalanche"],
   "0x89": ["polygon-rpc.com", "Polygon"],
   "0xa4b1": ["arb1.arbitrum.io/rpc", "Arbitrum"],
-  "0x38": ["bscrpc.com", "BNB Chain"],
+  "0x38": ["bsc-dataseed3.binance.org", "BNB Chain"],
   "0x406": ["evm.confluxrpc.com", "Conflux eSpace"],
   "0xfa": ["rpc.ankr.com/fantom", "Fantom"],
 }
@@ -33,8 +36,19 @@ const readSources = (sourceNames) => Object.fromEntries(
   }])
 )
 
-/** @const {string} */
-const DOMAIN_SEPARATOR = "0x7fac9a4ba27a28c432ccad9cad6a299334875c9ce9801df0d292862b0d4f51cb";
+/**
+ * @param {string} chainId
+ * @param {string} deployerAddress
+ */
+const computeDomainSeparator = (chainId, deployerAddress) => ethers.utils._TypedDataEncoder.hashDomain({
+  name: 'TCKT',
+  version: '1',
+  chainId,
+  verifyingContract: ethers.utils.getContractAddress({
+    from: deployerAddress,
+    nonce: 0
+  })
+});
 
 /**
  * @param {!Object<string, !SourceFile>} sources
@@ -43,16 +57,7 @@ const DOMAIN_SEPARATOR = "0x7fac9a4ba27a28c432ccad9cad6a299334875c9ce9801df0d292
  * @return {!Object<string, !SourceFile>}
  */
 const processSources = (sources, chainId, deployerAddress) => {
-  const deployedAddress = ethers.utils.getContractAddress({
-    from: deployerAddress,
-    nonce: 0
-  });
-  const domainSeparator = ethers.utils._TypedDataEncoder.hashDomain({
-    name: 'TCKT',
-    version: '1',
-    chainId,
-    verifyingContract: deployedAddress
-  });
+  const domainSeparator = computeDomainSeparator(chainId, deployerAddress);
   let file = sources["TCKT.sol"].content;
   console.log(`${chainId}\tDOMAIN_SEPARATOR() = ${domainSeparator}`);
 
@@ -68,54 +73,77 @@ const processSources = (sources, chainId, deployerAddress) => {
 }
 
 /**
+ * @param {string} bytecode
  * @param {string} chainId
- * @param {!ethers.Wallet} wallet
+ * @param {string} deployerAddress
  */
-const deployToChain = (chainId, wallet) => {
+const compareAgainstFoundry = (bytecode, chainId, deployerAddress) => {
+  if (chainId != "0xa86a") return;
+  const domainSeparator = computeDomainSeparator(chainId, deployerAddress);
+  const foundryBytecode = JSON.parse(readFileSync("out/TCKT.sol/TCKT.json"))
+    .bytecode.object.slice(2)
+    .replaceAll(DOMAIN_SEPARATOR.slice(2), domainSeparator.slice(2));
+  console.log(domainSeparator);
+  if (bytecode.slice(0, -86) != foundryBytecode.slice(0, -86)) {
+    console.log("Bytecode differs from Foundry compiled one " + chainId);
+    process.exit(1);
+  }
+}
+
+/**
+ * @param {string} chainId
+ * @param {string} privKey
+ * @return {Promise<void>}
+ */
+const deployToChain = (chainId, privKey) => {
   /** @const {!ethers.Provider} */
   const provider = new ethers.providers.JsonRpcProvider("https://" + JsonRpcUrls[chainId][0]);
-  wallet.connect(provider);
+  /** @const {!ethers.Wallet} */
+  const wallet = new ethers.Wallet(privKey, provider);
 
-  const compilerInput = {
-    language: "Solidity",
-    sources: processSources(readSources([
-      "IDIDSigners.sol",
-      "interfaces/Addresses.sol",
-      "interfaces/IERC20.sol",
-      "interfaces/IERC20Permit.sol",
-      "interfaces/IERC721.sol",
-      "TCKT.sol",
-    ]), chainId, wallet.address),
-    settings: {
-      optimizer: {
-        enabled: Foundry.optimizer,
-        runs: Foundry.optimizer_runs,
-      },
-      outputSelection: {
-        "TCKT.sol": {
-          "TCKT": ["abi", "evm.bytecode.object"]
-        }
+  provider.getTransactionCount(wallet.address, "pending")
+    .then((nonce) => {
+      if (nonce) {
+        console.warn(`${chainId}\tThere is a previous deployment with this private key on ${chainId}.`);
+        return;
       }
-    },
-  }
-  const output = JSON.parse(solc.compile(JSON.stringify(compilerInput)));
-  const TCKT = output.contracts["TCKT.sol"]["TCKT"];
+      const compilerInput = {
+        language: "Solidity",
+        sources: processSources(readSources([
+          "IDIDSigners.sol",
+          "interfaces/Addresses.sol",
+          "interfaces/IERC20.sol",
+          "interfaces/IERC20Permit.sol",
+          "interfaces/IERC721.sol",
+          "TCKT.sol",
+        ]), chainId, wallet.address),
+        settings: {
+          optimizer: {
+            enabled: Foundry.optimizer,
+            runs: Foundry.optimizer_runs,
+          },
+          outputSelection: {
+            "TCKT.sol": {
+              "TCKT": ["abi", "evm.bytecode.object"]
+            }
+          }
+        },
+      }
+      const output = JSON.parse(solc.compile(JSON.stringify(compilerInput)));
+      const TCKT = output.contracts["TCKT.sol"]["TCKT"];
 
-  if (chainId == "0xa86a") {
-    const solcjsBytecode = TCKT.evm.bytecode.object;
-    const foundryBytecode = JSON.parse(readFileSync("out/TCKT.sol/TCKT.json")).bytecode.object.slice(2);
-    if (solcjsBytecode.slice(0, -86) != foundryBytecode.slice(0, -86)) {
-      console.log("Bytecode differs from Foundry compiled one");
-      process.exit(1);
-    }
-  }
-  const factory = new ethers.ContractFactory(TCKT.abi, TCKT.evm.bytecode.object, wallet);
-  const deployTransaction = factory.getDeployTransaction();
-  const gasPromise = provider.estimateGas(deployTransaction.data);
-  const gasPricePromise = provider.getGasPrice();
-  Promise.all([gasPromise, gasPricePromise])
-    .then(([gas, gasPrice]) => {
-      console.log(`${chainId}\t\tgas: ${gas.toBigInt()} x ${ethers.utils.formatUnits(gasPrice, "gwei")} gwei`);
+      console.log(`${chainId}\tBytecode size\t${TCKT.evm.bytecode.object.length}`);
+
+      compareAgainstFoundry(TCKT.evm.bytecode.object, chainId, wallet.address);
+
+      const factory = new ethers.ContractFactory(TCKT.abi, TCKT.evm.bytecode.object, wallet);
+      const deployTransaction = factory.getDeployTransaction();
+      const gasPromise = provider.estimateGas(deployTransaction.data);
+      const gasPricePromise = provider.getGasPrice();
+      Promise.all([gasPromise, gasPricePromise])
+        .then(([gas, gasPrice]) => {
+          console.log(`${chainId}\t\tgas: ${gas.toBigInt()} x ${ethers.utils.formatUnits(gasPrice, "gwei")} gwei`);
+        })
     })
 }
 
@@ -141,7 +169,7 @@ const deployToAllChains = (privKey) => {
     `        Deployer address: ${wallet.address}\n` +
     `        Deployed address: ${deployedAddress}\n\n`);
   Object.keys(JsonRpcUrls).forEach((chainId) =>
-    deployToChain(chainId, wallet));
+    deployToChain(chainId, privKey));
 }
 
 deployToAllChains(
