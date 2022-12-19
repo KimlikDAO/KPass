@@ -507,21 +507,23 @@ contract TCKTSignersTest is Test {
 
     function testTotalBalancePreserved() external {
         prepareSigners();
-
+        vm.warp(100);
         vm.startPrank(OYLAMA);
         tcktSigners.approveSignerNode(vm.addr(1));
         tcktSigners.approveSignerNode(vm.addr(2));
         tcktSigners.setStakingDeposit(1e12 / 2);
         tcktSigners.approveSignerNode(vm.addr(3));
 
+        vm.warp(101);
         tcktSigners.slashSignerNode(vm.addr(2));
         vm.stopPrank();
 
         assertEq(tcktSigners.balanceOf(vm.addr(2)), 0);
-        assertEq(
+        assertApproxEqAbs(
             tcktSigners.balanceOf(vm.addr(1)) +
                 tcktSigners.balanceOf(vm.addr(3)),
-            15e11
+            25e11,
+            5
         );
     }
 }
