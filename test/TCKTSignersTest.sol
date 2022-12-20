@@ -28,6 +28,12 @@ contract TCKTSignersTest is Test {
         }
     }
 
+    function testTCKOstInterface() external {
+        assertEq(tcktSigners.name(), "Staked TCKO");
+        assertEq(tcktSigners.symbol(), "TCKO-st");
+        assertEq(tcktSigners.decimals(), tcko.decimals());
+    }
+
     function testAuthorization() external {
         vm.expectRevert();
         tcktSigners.setStakingDeposit(2e12);
@@ -132,6 +138,9 @@ contract TCKTSignersTest is Test {
         vm.warp(200);
         vm.prank(OYLAMA);
         tcktSigners.slashSignerNode(vm.addr(1));
+
+        assertEq(tcktSigners.balanceOf(vm.addr(1)), 0);
+        assertEq(tcktSigners.balanceOf(vm.addr(2)), 2e12);
     }
 
     function testBalanceOf() external {
@@ -323,5 +332,293 @@ contract TCKTSignersTest is Test {
             tcko.balanceOf(address(tcktSigners))
         );
         assertEq(tcktSigners.decimals(), tcko.decimals());
+    }
+
+    function testStateTransitionMultiple() external {
+        for (uint256 t = 1; t <= 10; ++t) {
+            vm.startPrank(vm.addr(t));
+            tcko.mint(1e12);
+            tcko.approve(address(tcktSigners), 1e12);
+            vm.expectRevert();
+            tcktSigners.unstake();
+            vm.expectRevert();
+            tcktSigners.withdraw();
+            vm.stopPrank();
+        }
+
+        vm.warp(10001);
+        vm.startPrank(OYLAMA);
+        for (uint256 t = 1; t <= 5; ++t) {
+            tcktSigners.approveSignerNode(vm.addr(t));
+            assertEq(tcktSigners.signerInfo(vm.addr(t)), (1e12 << 64) | 10001);
+        }
+        vm.stopPrank();
+
+        vm.warp(10002);
+        vm.startPrank(OYLAMA);
+        for (uint256 t = 6; t <= 10; t++) {
+            tcktSigners.approveSignerNode(vm.addr(t));
+            assertEq(tcktSigners.signerInfo(vm.addr(t)), (1e12 << 64) | 10002);
+        }
+        vm.stopPrank();
+
+        vm.warp(10003);
+        vm.startPrank(OYLAMA);
+        for (uint256 t = 6; t <= 10; t++) {
+            tcktSigners.slashSignerNode(vm.addr(t));
+            assertEq(
+                tcktSigners.signerInfo(vm.addr(t)),
+                (uint256(10003) << 128) | (1e12 << 64) | 10002
+            );
+        }
+        vm.stopPrank();
+
+        vm.warp(10004);
+        for (uint256 t = 1; t <= 5; ++t) {
+            vm.startPrank(vm.addr(t));
+            vm.expectRevert();
+            tcktSigners.withdraw();
+
+            tcktSigners.unstake();
+
+            vm.expectRevert();
+            tcktSigners.unstake();
+            vm.stopPrank();
+        }
+
+        vm.warp(10005 + 30 days);
+        for (uint256 t = 1; t <= 5; ++t) {
+            vm.startPrank(vm.addr(t));
+            tcktSigners.withdraw();
+            vm.stopPrank();
+        }
+
+        assertApproxEqAbs(tcko.balanceOf(vm.addr(1)), 2e12, 5);
+    }
+
+    function testUnstakeMultiple() external {
+        prepareSigners();
+        vm.startPrank(OYLAMA);
+        for (uint256 t = 1; t <= 5; ++t) {
+            vm.warp(t);
+            tcktSigners.approveSignerNode(vm.addr(t));
+            assertEq(tcktSigners.balanceOf(vm.addr(t)), 1e12);
+        }
+        vm.stopPrank();
+
+        for (uint256 t = 1; t <= 5; ++t) {
+            vm.prank(vm.addr(t));
+            tcktSigners.unstake();
+            assertEq(tcko.balanceOf(vm.addr(t)), 0);
+            assertEq(tcktSigners.balanceOf(vm.addr(t)), 1e12);
+        }
+
+        vm.warp(6 + 30 days);
+
+        for (uint256 t = 1; t <= 5; ++t) {
+            vm.prank(vm.addr(t));
+            tcktSigners.withdraw();
+            assertEq(tcko.balanceOf(vm.addr(t)), 1e12);
+            assertEq(tcktSigners.balanceOf(vm.addr(t)), 0);
+        }
+    }
+
+    function testApprovingSignerNode() external {
+        prepareSigners();
+
+        vm.startPrank(OYLAMA);
+        for (uint256 t = 1; t <= 10; ++t) {
+            vm.warp(t);
+            assertEq(tcktSigners.signerInfo(vm.addr(t)), 0);
+            tcktSigners.approveSignerNode(vm.addr(t));
+            assertEq(
+                tcktSigners.depositBalanceOf(vm.addr(t)),
+                tcktSigners.stakingDeposit()
+            );
+            assertEq(
+                tcko.balanceOf(address(tcktSigners)),
+                t * tcktSigners.stakingDeposit()
+            );
+            assertEq(
+                tcktSigners.signerInfo(vm.addr(t)),
+                (tcktSigners.stakingDeposit() << 64) | block.timestamp
+            );
+        }
+        vm.stopPrank();
+    }
+
+    function testSlashingSignerNode() external {
+        prepareSigners();
+
+        vm.warp(100);
+        vm.startPrank(OYLAMA);
+        for (uint256 t = 1; t <= 5; ++t) {
+            assertEq(tcktSigners.signerInfo(vm.addr(t)), 0);
+            tcktSigners.approveSignerNode(vm.addr(t));
+            assertEq(
+                tcktSigners.depositBalanceOf(vm.addr(t)),
+                tcktSigners.stakingDeposit()
+            );
+            assertEq(
+                tcko.balanceOf(address(tcktSigners)),
+                t * tcktSigners.stakingDeposit()
+            );
+        }
+        vm.stopPrank();
+
+        vm.warp(101);
+        vm.prank(OYLAMA);
+        tcktSigners.slashSignerNode(vm.addr(1));
+
+        vm.warp(102);
+        vm.startPrank(vm.addr(2));
+        tcktSigners.unstake();
+        vm.expectRevert();
+        tcktSigners.withdraw();
+        vm.stopPrank();
+
+        vm.warp(103);
+        vm.startPrank(vm.addr(3));
+        tcktSigners.unstake();
+        vm.expectRevert();
+        tcktSigners.withdraw();
+        vm.stopPrank();
+
+        vm.warp(102 + 31 days);
+        vm.prank(vm.addr(2));
+        tcktSigners.withdraw();
+
+        vm.prank(OYLAMA);
+        tcktSigners.slashSignerNode(vm.addr(4));
+
+        vm.warp(103 + 31 days);
+        vm.prank(vm.addr(3));
+        tcktSigners.withdraw();
+
+        assertEq(tcktSigners.balanceOf(vm.addr(1)), 0);
+        assertEq(tcktSigners.balanceOf(vm.addr(2)), 0);
+        assertEq(tcktSigners.balanceOf(vm.addr(3)), 0);
+        assertEq(tcktSigners.balanceOf(vm.addr(4)), 0);
+        assertEq(tcktSigners.balanceOf(vm.addr(5)), 25e11);
+        assertEq(tcko.balanceOf(vm.addr(1)), 0);
+        assertEq(tcko.balanceOf(vm.addr(2)), 125e10);
+        assertEq(tcko.balanceOf(vm.addr(3)), 125e10);
+        assertEq(tcko.balanceOf(vm.addr(4)), 0);
+        assertEq(tcko.balanceOf(vm.addr(5)), 0);
+    }
+
+    function testTotalBalancePreserved() external {
+        prepareSigners();
+        vm.warp(100);
+        vm.startPrank(OYLAMA);
+        tcktSigners.approveSignerNode(vm.addr(1));
+        tcktSigners.approveSignerNode(vm.addr(2));
+        tcktSigners.setStakingDeposit(1e12 / 2);
+        tcktSigners.approveSignerNode(vm.addr(3));
+
+        vm.warp(101);
+        tcktSigners.slashSignerNode(vm.addr(2));
+        vm.stopPrank();
+
+        assertEq(tcktSigners.balanceOf(vm.addr(2)), 0);
+        assertApproxEqAbs(
+            tcktSigners.balanceOf(vm.addr(1)) +
+                tcktSigners.balanceOf(vm.addr(3)),
+            25e11,
+            5
+        );
+    }
+
+    function testSlashingPermutationInvariance() external {
+        prepareSigners();
+        vm.startPrank(OYLAMA);
+        vm.warp(0);
+        for (uint256 s = 1; s <= 11; ++s)
+            tcktSigners.approveSignerNode(vm.addr(s));
+        // Slash signers 2, ..., 11 in some arbitrary order.
+        for (uint256 t = 1; t < 11; ++t) {
+            vm.warp(t);
+            tcktSigners.slashSignerNode(vm.addr(((t * 8) % 11) + 1));
+        }
+        vm.stopPrank();
+
+        assertApproxEqAbs(tcktSigners.balanceOf(vm.addr(1)), 11e12, 5);
+    }
+
+    function testScenarioA() external {
+        vm.warp(0);
+        for (uint256 s = 1; s <= 19; ++s) {
+            vm.startPrank(vm.addr(s));
+            tcko.mint(s * 1e12);
+            tcko.approve(address(tcktSigners), s * 1e12);
+            vm.stopPrank();
+            vm.startPrank(OYLAMA);
+            tcktSigners.setStakingDeposit(uint48(s * 1e12));
+            tcktSigners.approveSignerNode(vm.addr(s));
+            vm.stopPrank();
+        }
+
+        // Slash nodes 2 through 19 in some arbitrary order.
+        vm.startPrank(OYLAMA);
+        for (uint256 t = 1; t < 19; ++t) {
+            vm.warp(t);
+            tcktSigners.slashSignerNode(vm.addr(((t * 17) % 19) + 1));
+        }
+        vm.stopPrank();
+
+        // (19 * 20) / 2 = 190
+        assertApproxEqAbs(tcktSigners.balanceOf(vm.addr(1)), 190e12, 20);
+
+        vm.prank(OYLAMA);
+        tcktSigners.setStakingDeposit(20e12);
+        for (uint256 t = 20; t < 24; ++t) {
+            vm.warp(t);
+            vm.startPrank(vm.addr(t));
+            tcko.mint(20e12);
+            tcko.approve(address(tcktSigners), 20e12);
+            vm.stopPrank();
+            vm.prank(OYLAMA);
+            tcktSigners.approveSignerNode(vm.addr(t));
+        }
+
+        vm.warp(24);
+
+        vm.prank(vm.addr(21));
+        tcktSigners.unstake();
+
+        vm.prank(OYLAMA);
+        tcktSigners.slashSignerNode(vm.addr(23));
+
+        assertApproxEqAbs(
+            tcktSigners.balanceOf(vm.addr(22)),
+            20e12 + uint256(400e12) / 41,
+            20
+        );
+
+        vm.prank(vm.addr(22));
+        tcktSigners.unstake();
+
+        vm.prank(OYLAMA);
+        tcktSigners.slashSignerNode(vm.addr(20));
+
+        vm.warp(25 + 30 days);
+
+        vm.prank(vm.addr(22));
+        tcktSigners.withdraw();
+
+        vm.prank(vm.addr(21));
+        tcktSigners.withdraw();
+
+        assertApproxEqAbs(tcko.balanceOf(vm.addr(21)), 20e12, 25);
+        assertApproxEqAbs(
+            tcko.balanceOf(vm.addr(22)),
+            20e12 + uint256(400e12) / 41,
+            20
+        );
+        assertApproxEqAbs(
+            tcktSigners.balanceOf(vm.addr(1)),
+            210e12 + (21 * uint256(20e12)) / 41,
+            20
+        );
     }
 }
