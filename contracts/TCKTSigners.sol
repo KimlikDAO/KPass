@@ -2,7 +2,7 @@
 
 pragma solidity 0.8.17;
 
-import {END_TS_MASK, IDIDSigners} from "./IDIDSigners.sol";
+import {END_TS_MASK, IDIDSigners, WITHDRAW_MASK} from "interfaces/IDIDSigners.sol";
 import {IERC20} from "interfaces/IERC20.sol";
 import {OYLAMA, TCKO_ADDR} from "interfaces/Addresses.sol";
 
@@ -131,7 +131,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     function balanceOf(address addr) public view returns (uint256) {
         uint256 info = signerInfo[addr];
         unchecked {
-            if (info & END_TS_MASK != 0) return info >> 192;
+            if (info & END_TS_MASK != 0) return uint48(info >> 176);
             uint256 startTs = uint64(info);
             uint256 n = jointDepositCount;
             uint256 r = n;
@@ -147,7 +147,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
                 ? jointDeposits[n]
                 : jointDeposits[n] - jointDeposits[r];
             return
-                (uint64(info >> 64) *
+                (uint48(info >> 64) *
                     (CUM_RATE_MULTIPLIER + (cumulativeRate >> 64))) /
                 CUM_RATE_MULTIPLIER;
         }
@@ -163,7 +163,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * @return The amount of TCKOs the signer deposited.
      */
     function depositBalanceOf(address addr) external view returns (uint256) {
-        return uint64(signerInfo[addr] >> 64);
+        return uint48(signerInfo[addr] >> 64);
     }
 
     function transfer(address, uint256) external pure override returns (bool) {
@@ -271,8 +271,11 @@ contract TCKTSigners is IDIDSigners, IERC20 {
         uint256 stakeAmount = stakingDeposit;
         IERC20(TCKO_ADDR).transferFrom(addr, address(this), stakeAmount);
         unchecked {
+            uint256 color = uint256(
+                keccak256(abi.encode(addr, block.timestamp))
+            ) << 224;
             signerDepositBalance += stakeAmount;
-            signerInfo[addr] = (stakeAmount << 64) | block.timestamp;
+            signerInfo[addr] = color | (stakeAmount << 64) | block.timestamp;
         }
         emit SignerNodeJoin(addr, block.timestamp);
         emit Transfer(address(this), addr, stakeAmount);
@@ -294,11 +297,11 @@ contract TCKTSigners is IDIDSigners, IERC20 {
         require(info != 0 && (info & END_TS_MASK == 0));
         unchecked {
             uint256 toWithdraw = balanceOf(msg.sender);
-            uint256 deposited = uint64(info >> 64);
+            uint256 deposited = uint48(info >> 64);
             signerDepositBalance -= deposited;
             signerInfo[msg.sender] =
-                (toWithdraw << 192) |
-                (block.timestamp << 128) |
+                (toWithdraw << 176) |
+                (block.timestamp << 112) |
                 info;
         }
         emit SignerNodeLeave(msg.sender, block.timestamp);
@@ -314,12 +317,12 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     function withdraw() external {
         uint256 info = signerInfo[msg.sender];
         unchecked {
-            uint256 endTs = uint64(info >> 128);
-            uint256 toWithdraw = info >> 192;
+            uint256 endTs = uint64(info >> 112);
+            uint256 toWithdraw = uint48(info >> 176);
             // Ensure `state(msg.sender) == U`
             require(toWithdraw != 0 && endTs != 0);
             require(block.timestamp > endTs + 30 days);
-            signerInfo[msg.sender] = uint192(info);
+            signerInfo[msg.sender] = info & ~WITHDRAW_MASK;
             IERC20(TCKO_ADDR).transfer(msg.sender, toWithdraw);
             emit Transfer(msg.sender, address(this), toWithdraw);
         }
@@ -342,13 +345,12 @@ contract TCKTSigners is IDIDSigners, IERC20 {
             uint256 signerBalanceLeft = signerDepositBalance;
             // The case `state(addr) == S`
             if (info != 0 && info & END_TS_MASK == 0) {
-                signerInfo[addr] = (block.timestamp << 128) | info;
-                signerBalanceLeft -= uint64(info >> 64);
+                signerInfo[addr] = (block.timestamp << 112) | info;
+                signerBalanceLeft -= uint48(info >> 64);
                 signerDepositBalance = signerBalanceLeft;
             } else {
                 // The case `state(addr) == U`
-                require(info >> 192 != 0);
-                signerInfo[addr] = uint192(info); // Zero-out toWithdraw
+                signerInfo[addr] = info & ~WITHDRAW_MASK; // Zero-out toWithdraw
             }
             uint256 n = jointDepositCount;
             uint256 cumRate = jointDeposits[n] >> 64;

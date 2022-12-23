@@ -81,21 +81,27 @@ contract TCKTSignersTest is Test {
         vm.prank(OYLAMA);
         tcktSigners.approveSignerNode(vm.addr(1));
 
-        assertEq(tcktSigners.signerInfo(vm.addr(1)), (1e12 << 64) | 10001);
+        assertEq(
+            uint224(tcktSigners.signerInfo(vm.addr(1))),
+            (1e12 << 64) | 10001
+        );
 
         vm.warp(10002);
         vm.prank(OYLAMA);
         tcktSigners.approveSignerNode(vm.addr(2));
 
-        assertEq(tcktSigners.signerInfo(vm.addr(2)), (1e12 << 64) | 10002);
+        assertEq(
+            uint224(tcktSigners.signerInfo(vm.addr(2))),
+            (1e12 << 64) | 10002
+        );
 
         vm.warp(10003);
         vm.prank(OYLAMA);
         tcktSigners.slashSignerNode(vm.addr(2));
 
         assertEq(
-            tcktSigners.signerInfo(vm.addr(2)),
-            (uint256(10003) << 128) | (1e12 << 64) | 10002
+            uint224(tcktSigners.signerInfo(vm.addr(2))),
+            (uint256(10003) << 112) | (1e12 << 64) | 10002
         );
 
         vm.warp(10004);
@@ -350,7 +356,10 @@ contract TCKTSignersTest is Test {
         vm.startPrank(OYLAMA);
         for (uint256 t = 1; t <= 5; ++t) {
             tcktSigners.approveSignerNode(vm.addr(t));
-            assertEq(tcktSigners.signerInfo(vm.addr(t)), (1e12 << 64) | 10001);
+            assertEq(
+                uint224(tcktSigners.signerInfo(vm.addr(t))),
+                (1e12 << 64) | 10001
+            );
         }
         vm.stopPrank();
 
@@ -358,7 +367,10 @@ contract TCKTSignersTest is Test {
         vm.startPrank(OYLAMA);
         for (uint256 t = 6; t <= 10; t++) {
             tcktSigners.approveSignerNode(vm.addr(t));
-            assertEq(tcktSigners.signerInfo(vm.addr(t)), (1e12 << 64) | 10002);
+            assertEq(
+                uint224(tcktSigners.signerInfo(vm.addr(t))),
+                (1e12 << 64) | 10002
+            );
         }
         vm.stopPrank();
 
@@ -367,8 +379,8 @@ contract TCKTSignersTest is Test {
         for (uint256 t = 6; t <= 10; t++) {
             tcktSigners.slashSignerNode(vm.addr(t));
             assertEq(
-                tcktSigners.signerInfo(vm.addr(t)),
-                (uint256(10003) << 128) | (1e12 << 64) | 10002
+                uint224(tcktSigners.signerInfo(vm.addr(t))),
+                (uint256(10003) << 112) | (1e12 << 64) | 10002
             );
         }
         vm.stopPrank();
@@ -423,7 +435,7 @@ contract TCKTSignersTest is Test {
         }
     }
 
-    function testApprovingSignerNode() external {
+    function testApproveSignerNode() external {
         prepareSigners();
 
         vm.startPrank(OYLAMA);
@@ -440,14 +452,14 @@ contract TCKTSignersTest is Test {
                 t * tcktSigners.stakingDeposit()
             );
             assertEq(
-                tcktSigners.signerInfo(vm.addr(t)),
+                uint112(tcktSigners.signerInfo(vm.addr(t))),
                 (tcktSigners.stakingDeposit() << 64) | block.timestamp
             );
         }
         vm.stopPrank();
     }
 
-    function testSlashingSignerNode() external {
+    function testSlashSignerNode() external {
         prepareSigners();
 
         vm.warp(100);
@@ -529,7 +541,35 @@ contract TCKTSignersTest is Test {
         );
     }
 
-    function testSlashingPermutationInvariance() external {
+    function testColorIsPreserved() external {
+        prepareSigners();
+        vm.startPrank(OYLAMA);
+        for (uint256 t = 1; t <= 11; ++t) {
+            vm.warp(t);
+            tcktSigners.approveSignerNode(vm.addr(t));
+        }
+        vm.stopPrank();
+
+        uint256 color = tcktSigners.signerInfo(vm.addr(1)) >> 224;
+        vm.prank(vm.addr(1));
+        tcktSigners.unstake();
+
+        assertEq(tcktSigners.signerInfo(vm.addr(1)) >> 224, color);
+
+        vm.warp(12 + 30 days);
+        vm.prank(vm.addr(1));
+        tcktSigners.withdraw();
+
+        assertEq(tcktSigners.signerInfo(vm.addr(1)) >> 224, color);
+
+        uint256 color2 = tcktSigners.signerInfo(vm.addr(2)) >> 224;
+        vm.prank(OYLAMA);
+        tcktSigners.slashSignerNode(vm.addr(2));
+
+        assertEq(tcktSigners.signerInfo(vm.addr(2)) >> 224, color2);
+    }
+
+    function testSlashPermutationInvariance() external {
         prepareSigners();
         vm.startPrank(OYLAMA);
         vm.warp(0);

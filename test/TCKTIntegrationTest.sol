@@ -13,7 +13,7 @@ contract TCKTIntegrationTest is Test {
     TCKT private tckt;
     TCKTSigners private tcktSigners;
 
-    event ExposureReport(bytes32 indexed exposureReportID, uint64 timestamp);
+    event ExposureReport(bytes32 indexed exposureReportID, uint256 timestamp);
 
     function setUp() public {
         vm.prank(TCKT_DEPLOYER);
@@ -37,12 +37,10 @@ contract TCKTIntegrationTest is Test {
 
     function signOffExposureReport(
         bytes32 exposureReportID,
-        uint64 timestamp,
+        uint256 timestamp,
         uint256 signerKey
     ) internal pure returns (Signature memory sig) {
-        bytes32 digest = keccak256(
-            abi.encodePacked(exposureReportID, timestamp)
-        );
+        bytes32 digest = keccak256(abi.encode(timestamp, exposureReportID));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
         sig.r = r;
         sig.yParityAndS = ((uint256(v) - 27) << 255) | uint256(s);
@@ -115,7 +113,7 @@ contract TCKTIntegrationTest is Test {
             [sigs[0], sigs[0], sigs[1]]
         );
         vm.expectEmit(true, true, true, true, address(tckt));
-        emit ExposureReport(bytes32(uint256(123)), uint64(130));
+        emit ExposureReport(bytes32(uint256(123)), uint256(130));
         tckt.reportExposure(
             bytes32(uint256(123)),
             130,

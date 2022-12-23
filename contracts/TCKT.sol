@@ -3,7 +3,7 @@
 pragma solidity 0.8.17;
 
 import {DAO_KASASI, OYLAMA, TCKT_SIGNERS} from "interfaces/Addresses.sol";
-import {IDIDSigners} from "./IDIDSigners.sol";
+import {IDIDSigners} from "interfaces/IDIDSigners.sol";
 import {IERC20, IERC20Permit} from "interfaces/IERC20Permit.sol";
 import {IERC721} from "interfaces/IERC721.sol";
 
@@ -592,7 +592,7 @@ contract TCKT is IERC721 {
     /// new address), with which they can file an exposure report via the
     /// `reportExposure()` method. Doing so invalidates all TCKTs they have
     /// obtained before the timestamp of their most recent TCKT.
-    event ExposureReport(bytes32 indexed exposureReportID, uint64 timestamp);
+    event ExposureReport(bytes32 indexed exposureReportID, uint256 timestamp);
 
     /// Maps a `exposureReportID` to a reported exposure timestamp,
     /// or zero if no exposure has been reported.
@@ -609,13 +609,11 @@ contract TCKT is IERC721 {
      */
     function reportExposure(
         bytes32 exposureReportID,
-        uint64 timestamp,
+        uint256 timestamp,
         Signature[3] calldata signatures
     ) external {
         unchecked {
-            bytes32 digest = keccak256(
-                abi.encodePacked(exposureReportID, timestamp)
-            );
+            bytes32 digest = keccak256(abi.encode(timestamp, exposureReportID));
             address[3] memory signer;
             for (uint256 i = 0; i < 3; ++i) {
                 signer[i] = ecrecover(
