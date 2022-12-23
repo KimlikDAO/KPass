@@ -29,8 +29,8 @@ contract TCKTIntegrationTest is Test {
 
         for (uint256 i = 1; i <= 10; ++i) {
             vm.startPrank(vm.addr(i));
-            tcko.mint(1e12);
-            tcko.approve(address(tcktSigners), 1e12);
+            tcko.mint(200_000e6);
+            tcko.approve(address(tcktSigners), 2e11);
             vm.stopPrank();
         }
     }

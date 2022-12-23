@@ -44,10 +44,10 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * step to be a signer, but not nearly sufficient. The signer node operator
      * is vetted by the DAO and voted for approval.
      *
-     * The initial value is 1M TCKOs and the value is determined by DAO vote
+     * The initial value is 200K TCKOs and the value is determined by DAO vote
      * thereafter via the `setStakingDeposit()` method.
      */
-    uint256 public stakingDeposit = 1e12;
+    uint256 public stakingDeposit = 200_000e6;
 
     /**
      * The minimum number of valid signer node signatures needed for a

@@ -17,6 +17,9 @@ contract TCKTSignersTest is Test {
 
         vm.prank(TCKT_SIGNERS_DEPLOYER);
         tcktSigners = new TCKTSigners();
+
+        vm.prank(OYLAMA);
+        tcktSigners.setStakingDeposit(1e12);
     }
 
     function prepareSigners() public {
