@@ -615,7 +615,7 @@ contract TCKT is IERC721 {
         unchecked {
             bytes32 digest = keccak256(
                 abi.encode(
-                    uint256(bytes32("\x19KimlikDAO digest")) | timestamp,
+                    uint256(bytes32("\x19KimlikDAO hash")) | timestamp,
                     exposureReportID
                 )
             );
