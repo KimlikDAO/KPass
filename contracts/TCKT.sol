@@ -613,7 +613,12 @@ contract TCKT is IERC721 {
         Signature[3] calldata signatures
     ) external {
         unchecked {
-            bytes32 digest = keccak256(abi.encode(timestamp, exposureReportID));
+            bytes32 digest = keccak256(
+                abi.encode(
+                    uint256(bytes32("\x19KimlikDAO digest")) | timestamp,
+                    exposureReportID
+                )
+            );
             address[3] memory signer;
             for (uint256 i = 0; i < 3; ++i) {
                 signer[i] = ecrecover(

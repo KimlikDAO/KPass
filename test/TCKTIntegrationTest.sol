@@ -40,7 +40,12 @@ contract TCKTIntegrationTest is Test {
         uint256 timestamp,
         uint256 signerKey
     ) internal pure returns (Signature memory sig) {
-        bytes32 digest = keccak256(abi.encode(timestamp, exposureReportID));
+        bytes32 digest = keccak256(
+            abi.encode(
+                uint256(bytes32("\x19KimlikDAO digest")) | timestamp,
+                exposureReportID
+            )
+        );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
         sig.r = r;
         sig.yParityAndS = ((uint256(v) - 27) << 255) | uint256(s);
