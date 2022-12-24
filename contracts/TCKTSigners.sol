@@ -2,7 +2,7 @@
 
 pragma solidity 0.8.17;
 
-import {END_TS_MASK, IDIDSigners, WITHDRAW_MASK} from "interfaces/IDIDSigners.sol";
+import "interfaces/IDIDSigners.sol";
 import {IERC20} from "interfaces/IERC20.sol";
 import {OYLAMA, TCKO_ADDR} from "interfaces/Addresses.sol";
 
@@ -131,7 +131,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     function balanceOf(address addr) public view returns (uint256) {
         uint256 info = signerInfo[addr];
         unchecked {
-            if (info & END_TS_MASK != 0) return uint48(info >> 176);
+            if (info & END_TS_MASK != 0) return uint48(info >> WITHDRAW_OFFSET);
             uint256 startTs = uint64(info);
             uint256 n = jointDepositCount;
             uint256 r = n;
@@ -300,8 +300,8 @@ contract TCKTSigners is IDIDSigners, IERC20 {
             uint256 deposited = uint48(info >> 64);
             signerDepositBalance -= deposited;
             signerInfo[msg.sender] =
-                (toWithdraw << 176) |
-                (block.timestamp << 112) |
+                (toWithdraw << WITHDRAW_OFFSET) |
+                (block.timestamp << END_TS_OFFSET) |
                 info;
         }
         emit SignerNodeLeave(msg.sender, block.timestamp);
@@ -317,8 +317,8 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     function withdraw() external {
         uint256 info = signerInfo[msg.sender];
         unchecked {
-            uint256 endTs = uint64(info >> 112);
-            uint256 toWithdraw = uint48(info >> 176);
+            uint256 endTs = uint64(info >> END_TS_OFFSET);
+            uint256 toWithdraw = uint48(info >> WITHDRAW_OFFSET);
             // Ensure `state(msg.sender) == U`
             require(toWithdraw != 0 && endTs != 0);
             require(block.timestamp > endTs + 30 days);
@@ -345,7 +345,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
             uint256 signerBalanceLeft = signerDepositBalance;
             // The case `state(addr) == S`
             if (info != 0 && info & END_TS_MASK == 0) {
-                signerInfo[addr] = (block.timestamp << 112) | info;
+                signerInfo[addr] = (block.timestamp << END_TS_OFFSET) | info;
                 signerBalanceLeft -= uint48(info >> 64);
                 signerDepositBalance = signerBalanceLeft;
             } else {

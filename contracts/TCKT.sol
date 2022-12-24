@@ -3,7 +3,7 @@
 pragma solidity 0.8.17;
 
 import {DAO_KASASI, OYLAMA, TCKT_SIGNERS} from "interfaces/Addresses.sol";
-import {IDIDSigners} from "interfaces/IDIDSigners.sol";
+import {IDIDSigners, END_TS_OFFSET} from "interfaces/IDIDSigners.sol";
 import {IERC20, IERC20Permit} from "interfaces/IERC20Permit.sol";
 import {IERC721} from "interfaces/IERC721.sol";
 
@@ -628,7 +628,7 @@ contract TCKT is IERC721 {
                     bytes32(signatures[i].yParityAndS & ((1 << 255) - 1))
                 );
                 uint256 info = IDIDSigners(TCKT_SIGNERS).signerInfo(signer[i]);
-                uint256 endTs = uint64(info >> 112);
+                uint256 endTs = uint64(info >> END_TS_OFFSET);
                 require(
                     info != 0 &&
                         uint64(info) <= timestamp &&
