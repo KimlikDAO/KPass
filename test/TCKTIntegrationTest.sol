@@ -125,4 +125,33 @@ contract TCKTIntegrationTest is Test {
             [sigs[0], sigs[1], sigs[2]]
         );
     }
+
+    function testReportBySlashedSigner() external {
+        vm.warp(1000);
+        vm.startPrank(OYLAMA);
+        for (uint256 i = 1; i <= 10; ++i) {
+            vm.warp(1000 + 10 * i);
+            tcktSigners.approveSignerNode(vm.addr(i));
+        }
+
+        vm.warp(1110);
+        for (uint256 i = 1; i < 10; ++i) {
+            tcktSigners.slashSignerNode(vm.addr(i));
+        }
+        vm.stopPrank();
+
+        Signature[4] memory sigs = [
+            signOffExposureReport(bytes32(uint256(123)), 1111, 1),
+            signOffExposureReport(bytes32(uint256(123)), 1111, 2),
+            signOffExposureReport(bytes32(uint256(123)), 1111, 3),
+            signOffExposureReport(bytes32(uint256(123)), 1111, 4)
+        ];
+
+        vm.expectRevert();
+        tckt.reportExposure(
+            bytes32(uint256(123)),
+            1111,
+            [sigs[0], sigs[1], sigs[2]]
+        );
+    }
 }

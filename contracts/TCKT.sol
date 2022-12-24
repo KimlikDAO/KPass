@@ -609,7 +609,7 @@ contract TCKT is IERC721 {
      */
     function reportExposure(
         bytes32 exposureReportID,
-        uint256 timestamp,
+        uint64 timestamp,
         Signature[3] calldata signatures
     ) external {
         unchecked {
@@ -628,7 +628,7 @@ contract TCKT is IERC721 {
                     bytes32(signatures[i].yParityAndS & ((1 << 255) - 1))
                 );
                 uint256 info = IDIDSigners(TCKT_SIGNERS).signerInfo(signer[i]);
-                uint256 endTs = uint64(info >> 128);
+                uint256 endTs = uint64(info >> 112);
                 require(
                     info != 0 &&
                         uint64(info) <= timestamp &&
