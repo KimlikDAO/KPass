@@ -802,4 +802,54 @@ contract TCKTTest is Test {
             ]
         );
     }
+
+    function testLastRevokeTime() external {
+        vm.startPrank(vm.addr(11));
+        tckt.create(0xAAAA);
+        vm.warp(1000);
+        tckt.revoke();
+
+        assertEq(tckt.lastRevokeTimestamp(vm.addr(11)), 1000);
+
+        vm.warp(2000);
+        tckt.revoke();
+
+        assertGe(tckt.lastRevokeTimestamp(vm.addr(11)), 1000);
+
+        tckt.createWithRevokers(
+            0xAAAA,
+            [
+                (uint256(31) << 192) |
+                    (uint256(10) << 160) |
+                    uint160(vm.addr(1)),
+                (uint256(10) << 160) | uint160(vm.addr(2)),
+                (uint256(10) << 160) | uint160(vm.addr(3)),
+                (uint256(10) << 160) | uint160(vm.addr(4)),
+                (uint256(10) << 160) | uint160(vm.addr(5))
+            ]
+        );
+        vm.stopPrank();
+
+        vm.warp(3001);
+        assertGe(tckt.lastRevokeTimestamp(vm.addr(11)), 1000);
+
+        vm.prank(vm.addr(1));
+        tckt.revokeFriend(vm.addr(11));
+
+        assertGe(tckt.lastRevokeTimestamp(vm.addr(11)), 1000);
+
+        vm.warp(3002);
+        vm.prank(vm.addr(2));
+        tckt.revokeFriend(vm.addr(11));
+
+        vm.warp(3003);
+        vm.prank(vm.addr(3));
+        tckt.revokeFriend(vm.addr(11));
+
+        vm.warp(3004);
+        vm.prank(vm.addr(4));
+        tckt.revokeFriend(vm.addr(11));
+
+        assertEq(tckt.lastRevokeTimestamp(vm.addr(11)), 3004);
+    }
 }

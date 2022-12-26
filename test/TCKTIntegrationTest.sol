@@ -42,7 +42,7 @@ contract TCKTIntegrationTest is Test {
     ) internal pure returns (Signature memory sig) {
         bytes32 digest = keccak256(
             abi.encode(
-                uint256(bytes32("\x19KimlikDAO hash")) | timestamp,
+                uint256(bytes32("\x19KimlikDAO hash\n")) | timestamp,
                 exposureReportID
             )
         );
