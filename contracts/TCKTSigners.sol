@@ -131,6 +131,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     function balanceOf(address addr) public view returns (uint256) {
         uint256 info = signerInfo[addr];
         unchecked {
+            if (info == 0) return 0;
             if (info & END_TS_MASK != 0) return uint48(info >> WITHDRAW_OFFSET);
             uint256 startTs = uint64(info);
             uint256 n = jointDepositCount;

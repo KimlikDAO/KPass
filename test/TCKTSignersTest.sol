@@ -176,6 +176,8 @@ contract TCKTSignersTest is Test {
                 );
         }
         vm.stopPrank();
+
+        assertEq(tcktSigners.balanceOf(vm.addr(111)), 0);
     }
 
     function testUnstake() external {
