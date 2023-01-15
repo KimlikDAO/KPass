@@ -36,7 +36,8 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     event SignerNodeLeave(address indexed signer, uint256 timestamp);
     event SignerNodeSlash(address indexed signer, uint256 slashedAmount);
     event StakingDepositChange(uint48 stakeAmount);
-    event SignersNeededChange(uint256 signersCount);
+    event SignerCountNeededChange(uint256 signerCount);
+    event SignerStakeNeededChange(uint256 signerStake);
 
     /**
      * The amount of TCKOs a node must stake before they can be voted as a
@@ -44,16 +45,22 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * step to be a signer, but not nearly sufficient. The signer node operator
      * is vetted by the DAO and voted for approval.
      *
-     * The initial value is 200K TCKOs and the value is determined by DAO vote
+     * The initial value is 25K TCKOs and the value is determined by DAO vote
      * thereafter via the `setStakingDeposit()` method.
      */
-    uint256 public stakingDeposit = 200_000e6;
+    uint256 public stakingDeposit = 25_000e6;
 
     /**
      * The minimum number of valid signer node signatures needed for a
-     * validator to consider an `InfoSection` as valid.
+     * validator to consider a `did.Section` as valid.
      */
-    uint256 public signersNeeded = 3;
+    uint256 public signerCountNeeded = 3;
+
+    /**
+     * The minimum amount of stake of the valid signer node signatures needed
+     * for a validator to consider a `did.Section` as valid.
+     */
+    uint256 public signerStakeNeeded = 75_000e6;
 
     /**
      * The cumulative rate calculations are done as a multiple of this 80-bit
@@ -237,17 +244,31 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     }
 
     /**
-     * Sets the number of valid signatures needed before an `InfoSection` is
+     * Sets the number of valid signatures needed before a `did.Section` is
      * deemed valid by the validators.
      *
      * Can only be set by the DAO vote, that is, the `OYLAMA` contract.
      *
-     * @param signersCount the amount of valid signatures needed.
+     * @param signerCount the amount of valid signatures needed.
      */
-    function setSignersNeeded(uint256 signersCount) external {
+    function setSignerCountNeeded(uint256 signerCount) external {
         require(msg.sender == OYLAMA);
-        signersNeeded = signersCount;
-        emit SignersNeededChange(signersCount);
+        signerCountNeeded = signerCount;
+        emit SignerCountNeededChange(signerCount);
+    }
+
+    /**
+     * Sets the amount of valid signer stake needed before a `did.Section` is
+     * deemed valid by the validators.
+     *
+     * Can only be set by the DAO vote, that is, the `OYLAMA` contract.
+     *
+     * @param signerStake the amount of valid signer stake needed.
+     */
+    function setSignerStakeNeeded(uint256 signerStake) external {
+        require(msg.sender == OYLAMA);
+        signerStakeNeeded = signerStake;
+        emit SignerStakeNeededChange(signerStake);
     }
 
     ///////////////////////////////////////////////////////////////////////////

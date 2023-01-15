@@ -45,10 +45,16 @@ contract TCKTSignersTest is Test {
         assertEq(tcktSigners.stakingDeposit(), 2e12);
 
         vm.expectRevert();
-        tcktSigners.setSignersNeeded(5);
+        tcktSigners.setSignerCountNeeded(5);
         vm.prank(OYLAMA);
-        tcktSigners.setSignersNeeded(5);
-        assertEq(tcktSigners.signersNeeded(), 5);
+        tcktSigners.setSignerCountNeeded(5);
+        assertEq(tcktSigners.signerCountNeeded(), 5);
+
+        vm.expectRevert();
+        tcktSigners.setSignerStakeNeeded(80_000);
+        vm.prank(OYLAMA);
+        tcktSigners.setSignerStakeNeeded(80_000);
+        assertEq(tcktSigners.signerStakeNeeded(), 80_000);
 
         vm.expectRevert();
         tcktSigners.approveSignerNode(vm.addr(2));
