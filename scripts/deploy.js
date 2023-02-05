@@ -6,7 +6,7 @@ import { parse } from "toml";
 /**
  * @typedef {{ content: string }}
  */
-let SourceFile;
+const SourceFile = {};
 
 /** @const {string} */
 const DOMAIN_SEPARATOR = "0x7fac9a4ba27a28c432ccad9cad6a299334875c9ce9801df0d292862b0d4f51cb";
@@ -23,7 +23,7 @@ const JsonRpcUrls = {
 }
 
 /**
- * @param {Array<string>} sourceNames
+ * @param {!Array<string>} sourceNames
  * @param {string} chainId
  * @return {!Object<string, !SourceFile>}
  */
@@ -94,7 +94,7 @@ const compareAgainstFoundry = (bytecode, chainId, deployerAddress) => {
 /**
  * @param {string} chainId
  * @param {string} privKey
- * @return {Promise<void>}
+ * @return {!Promise<void>}
  */
 const deployToChain = (chainId, privKey) => {
   /** @const {!ethers.Provider} */
@@ -111,8 +111,8 @@ const deployToChain = (chainId, privKey) => {
       const compilerInput = {
         language: "Solidity",
         sources: processSources(readSources([
-          "IDIDSigners.sol",
           "interfaces/Addresses.sol",
+          "interfaces/IDIDSigners.sol",
           "interfaces/IERC20.sol",
           "interfaces/IERC20Permit.sol",
           "interfaces/IERC721.sol",
@@ -170,9 +170,9 @@ const deployToAllChains = (privKey) => {
     "        -----------------\n" +
     `        Deployer address: ${wallet.address}\n` +
     `        Deployed address: ${deployedAddress}\n\n`);
-  Object.keys(JsonRpcUrls).forEach((chainId) =>
-    deployToChain(chainId, privKey));
+  for (const chainId in JsonRpcUrls)
+    deployToChain(chainId, privKey);
 }
 
 deployToAllChains(
-  process.argv[2] || "32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33");
+  process.argv[2] || "0x32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33");
