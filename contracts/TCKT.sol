@@ -2,7 +2,7 @@
 
 pragma solidity 0.8.18;
 
-import {DAO_KASASI, OYLAMA, TCKT_SIGNERS} from "interfaces/Addresses.sol";
+import {DAO_KASASI, OYLAMA, TCKT_DEPLOYER, TCKT_SIGNERS} from "interfaces/Addresses.sol";
 import {IDIDSigners, END_TS_OFFSET} from "interfaces/IDIDSigners.sol";
 import {IERC20, IERC20Permit} from "interfaces/IERC20Permit.sol";
 import {IERC721} from "interfaces/IERC721.sol";
@@ -261,7 +261,7 @@ contract TCKT is IERC721 {
     //         keccak256(bytes("TCKT")),
     //         keccak256(bytes("1")),
     //         43114,
-    //         address(this)
+    //         0xcCc0FD2f0D06873683aC90e8d89B79d62236BcCc
     //     )
     // );
     bytes32 public constant DOMAIN_SEPARATOR =
@@ -275,11 +275,16 @@ contract TCKT is IERC721 {
      * Creates a TCKT on users behalf, covering the tx fee.
      *
      * The user has to explicitly authorize the TCKT creation with the
-     * `createSig`and the token payment with the `paymentSig`.
+     * `createSig` and the token payment with the `paymentSig`.
      *
-     * The gas fee is paid by the transaction sender, which typically is
-     * someone other than the TCKT owner. This enables gasless TCKT mints,
-     * wherein the gas fee is covered by the KimlikDAO gas station.
+     * The gas fee is paid by the transaction sender, which can be either
+     * `OYLAMA` or `TCKT_DEPLOYER`. We gate the method to these two addresses
+     * since the intent of a signature request is not as clear as that of a
+     * transaction and therefore a user may be tricked into creating a TCKT
+     * with incorrect and invalid contents. Note this restriction is not about
+     * TCKTs soundness; even if we made this method unrestricted, only the
+     * account owner could have created a valid TCKT. Still, we don't want
+     * users to be tricked into creating invalid TCKTs for whatever reason.
      *
      * @param handle           IPFS handle with which to create the TCKT.
      * @param createSig        Signature endorsing the TCKT creation.
@@ -293,6 +298,7 @@ contract TCKT is IERC721 {
         uint256 deadlineAndToken,
         Signature calldata paymentSig
     ) external {
+        require(msg.sender == OYLAMA || msg.sender == TCKT_DEPLOYER);
         IERC20Permit token = IERC20Permit(address(uint160(deadlineAndToken)));
         uint256 price = priceIn[address(token)] >> 128;
         require(price > 0);
@@ -443,15 +449,17 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * Cast a social revoke vote by signature.
+     * Cast a social revoke vote for a friend on `signature` creators behalf.
      *
-     * This method is particulatly useful when the revoker is virtual; the TCKT
+     * This method is particularly useful when the revoker is virtual; the TCKT
      * owner generates a private key and immediately signs a `revokeFriendFor`
      * request and e-mails the signature to a fiend. This way a friend who
      * doesn't have an EVM adress (but an email address) can cast a social
      * revoke vote.
      *
-     * @param signature        Signature authorizing the revoke.
+     * @param friend           Account whose TCKT will be cast a revoke vote.
+     * @param signature        Signature from the revoker, authorizing a revoke
+     *                         for `friend`.
      */
     function revokeFriendFor(address friend, Signature calldata signature)
         external
@@ -473,6 +481,7 @@ contract TCKT is IERC721 {
             require(revoker != address(0));
             uint256 revInfo = revokeInfo[friend];
             uint256 revokerW = revokerWeight[friend][revoker] << 192;
+            // revokerW > 0 if and only if revokerWeight[friend][revoker] > 0.
             require(revokerW > 0);
             delete revokerWeight[friend][revoker];
 
@@ -538,9 +547,6 @@ contract TCKT is IERC721 {
      *                         numerator followed by 128-bit denominator.
      * @param prices           A list of tuples (price, address) where the
      *                         price is an uint96 and the address is 20 bytes.
-     *                         Note if the price for a token does not fit in 96
-     *                         bits, the `updatePrice()` method should be used
-     *                         instead.
      */
     function updatePricesBulk(uint256 premium, uint256[5] calldata prices)
         external

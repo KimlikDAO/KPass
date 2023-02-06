@@ -164,6 +164,46 @@ contract TCKTTest is Test {
         assertEq(tckt.balanceOf(address(this)), 0);
     }
 
+    function testRevokeFriendForIntegration() external {
+        vm.warp(11111);
+        vm.prank(vm.addr(1));
+        tckt.createWithRevokers(
+            123123123,
+            [
+                (uint256(3) << 192) |
+                    (uint256(3) << 160) |
+                    uint160(0x79883D9aCBc4aBac6d2d216693F66FcC5A0BcBC1),
+                (uint256(1) << 160) | uint160(vm.addr(2)),
+                (uint256(1) << 160) | uint160(vm.addr(3)),
+                (uint256(1) << 160) | uint160(vm.addr(4)),
+                (uint256(1) << 160) | uint160(vm.addr(5))
+            ]
+        );
+
+        assertEq(tckt.balanceOf(vm.addr(1)), 1);
+        assertEq(tckt.lastRevokeTimestamp(vm.addr(1)), 0);
+
+        vm.warp(99999);
+        vm.prank(vm.addr(0xDEAD));
+        tckt.revokeFriendFor(
+            vm.addr(1),
+            Signature(
+                0x42e3139736e2b64a55ea99272ef446b6cc9b2bc7c9dbd28f00ffee7355685c37,
+                0xb798665eec9092093ae3f9ebf66aa26ff8b999b440b2b95279f16bf6a0383f19
+            )
+        );
+
+        assertEq(tckt.balanceOf(vm.addr(1)), 0);
+        assertEq(tckt.lastRevokeTimestamp(vm.addr(1)), 99999);
+
+        vm.warp(99999 + 1);
+        vm.prank(vm.addr(2));
+        tckt.revokeFriend(vm.addr(1));
+
+        assertEq(tckt.balanceOf(vm.addr(1)), 0);
+        assertGe(tckt.lastRevokeTimestamp(vm.addr(1)), 99999);
+    }
+
     function testLastRevokeTimePreserved() public {
         // Even someone get their private key stolen, the thief should not be
         // able to reduce the `lastRevokeTime`.
@@ -609,6 +649,7 @@ contract TCKTTest is Test {
     function testCreateFor() public {
         DeployMockTokens();
 
+        vm.deal(OYLAMA, 100000);
         vm.prank(OYLAMA);
         // Set TCKT price to 2 USDT
         tckt.updatePrice((2e6 << 160) | uint160(address(USDT)));
@@ -620,6 +661,7 @@ contract TCKTTest is Test {
             uint256 deadline = block.timestamp + 1200;
             uint256 deadlineAndToken = (deadline << 160) |
                 uint160(address(USDT));
+            vm.startPrank(OYLAMA);
             tckt.createFor(
                 123123123,
                 authorizeCreateFor(123123123),
@@ -631,6 +673,8 @@ contract TCKTTest is Test {
                     0
                 )
             );
+            vm.stopPrank();
+
             assertEq(tckt.balanceOf(vm.addr(0x1337ACC)), 1);
         }
 
@@ -648,8 +692,45 @@ contract TCKTTest is Test {
                 0
             );
             vm.expectRevert();
+            vm.prank(OYLAMA);
             tckt.createFor(123123123, createSig, deadlineAndToken, paymentSig);
         }
+    }
+
+    function testCreateForIntegration() external {
+        DeployMockTokens();
+
+        // `OYLAMA` mints a TCKT on behalf of
+        // 0x79883D9aCBc4aBac6d2d216693F66FcC5A0BcBC1.
+        // The handle is 0x7A4D1E and the TCKT costs 3 USDC.
+
+        vm.prank(OYLAMA);
+        // Set TCKT price to 2 USDC
+        tckt.updatePrice((2e6 << 160) | uint160(address(USDC)));
+
+        vm.prank(USDC_DEPLOYER);
+        USDC.transfer(0x79883D9aCBc4aBac6d2d216693F66FcC5A0BcBC1, 3e6);
+
+        assertEq(tckt.balanceOf(0x79883D9aCBc4aBac6d2d216693F66FcC5A0BcBC1), 0);
+
+        // Give some gas money to OYLAMA.
+        vm.deal(OYLAMA, 10000000);
+        vm.startPrank(OYLAMA);
+        tckt.createFor(
+            0x7A4D1E,
+            Signature(
+                0xfe70b2e6399ca3301ab720f81d92494052a3cbc42e6a820d127b961d2f077d10,
+                0xa2e0a6583fdbec6060db018606d652c7d2e3e5da56b5da54977d43d6471363ef
+            ),
+            (uint256(123456) << 160) | uint160(address(USDC)),
+            Signature(
+                0x0c85fb2045ea50c34e54e4a0df7648ba9181bd0903083366cf34958aaabf4a78,
+                0x0a15c9164d7c60c4cb1aa37879090cc83c78888e66e3d41663919e38006648ef
+            )
+        );
+        vm.stopPrank();
+
+        assertEq(tckt.balanceOf(0x79883D9aCBc4aBac6d2d216693F66FcC5A0BcBC1), 1);
     }
 
     function testTypeHashes() external {
@@ -660,6 +741,20 @@ contract TCKTTest is Test {
         assertEq(
             tckt.CREATE_FOR_TYPEHASH(),
             keccak256("CreateFor(uint256 handle)")
+        );
+        assertEq(
+            tckt.DOMAIN_SEPARATOR(),
+            keccak256(
+                abi.encode(
+                    keccak256(
+                        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+                    ),
+                    keccak256(bytes("TCKT")),
+                    keccak256(bytes("1")),
+                    43114,
+                    0xcCc0FD2f0D06873683aC90e8d89B79d62236BcCc
+                )
+            )
         );
     }
 
