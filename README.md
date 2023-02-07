@@ -1,4 +1,4 @@
-## TCKT: KimlikDAO DID
+## TCKT: KimlikDAO DID Token
 
 <img align="right" width="300" height="300" src="images/cover.svg">
 TCKT is a decentralized identifier (DID) NFT which can be minted by
@@ -11,6 +11,20 @@ The contents of each TCKT is cryptographically committed to a single EVM
 address, making it unusable from any other address.
 TCKT implements most of the ERC-721 NFT interface excluding, notably, the
 transfer-related methods, since TCKTs are non-transferrable.
+
+The contents of a TCKT are encrypted by the owners private keys in their
+browser and then stored on the IPFS compatible storage layer of the KimlikDAO
+protocol. The reason we do not use the IPFS network but a compatible 
+subnetwork run by KimlikDAO protocol nodes is that some jurisdictions
+require personal information to be stored in certain geo locations, even
+if the data is encrypted and even if it's encrypted by the user themselves.
+IPFS protocol is not designed to respect such restrictions, whereas the
+KimlikDAO protocol nodes will always honor these restrictions.
+
+Further, KimlikDAO nodes will stop persisting the contents of a TCKT if
+the owner revokes the TCKT using the `revoke()` method of this contract,
+giving the user the freedom to delete their persisted data at any time
+(even though the user data is encrypted on the user side)
 
 ### Minting
 
