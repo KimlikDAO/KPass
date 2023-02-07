@@ -32,6 +32,18 @@ contract TCKTTest is Test {
             ),
             "https://ipfs.kimlikdao.org/ipfs/QmcX2ScFVAVnEHrMk3xuf7HXfiGHzmMqdpAYb37zA5mbFp"
         );
+        assertEq(
+            tckt.tokenURI(uint256(keccak256("CID test 1"))),
+            "https://ipfs.kimlikdao.org/ipfs/QmVh6DdiLVjUndMVBmdoG1hXKuWFiUdbUFqqPBkhtNxJhA"
+        );
+        assertEq(
+            tckt.tokenURI(uint256(keccak256("CID test 2"))),
+            "https://ipfs.kimlikdao.org/ipfs/QmcbtE4RC2KFStbyjCnjACgNSxZJSKww2XGFRAMFVG4sNu"
+        );
+        assertEq(
+            tckt.tokenURI(uint256(keccak256("CID test 3"))),
+            "https://ipfs.kimlikdao.org/ipfs/QmQY9mWApretyH5dVMuqPThn299xNRp1knzuF9yMuF9kmM"
+        );
     }
 
     function testRevoke() public {
