@@ -1,5 +1,6 @@
 .DS_Store
 *.info
+*.verify.json
 *.lock
 /.vscode
 /cache

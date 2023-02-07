@@ -24,13 +24,13 @@ contract TCKTGasTest is Test {
     }
 
     function testCreate() external {
-        tckt.create(
+        tckt.create{value: 0.075 ether}(
             0xd2abff978646ac494f499e9ecd6873414a0c6105196c8c2580d52769f3fc0523
         );
     }
 
     function testCreateWithRevokers() public {
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             123123123,
             [
                 (uint256(2) << 192) |

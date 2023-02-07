@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { readFileSync } from "fs";
+import { readFileSync, write, writeFileSync } from "fs";
 import solc from "solc";
 import { parse } from "toml";
 
@@ -131,10 +131,8 @@ const deployToChain = async (chainId, privKey) => {
   console.log(`📜 Contract:      ${deployedAddress}`);
   console.log(`🧮 Nonce:         ${nonce}, ${nonce == 0 ? "👍" : "👎"}`)
 
-  if (nonce != 0) return;
-
   console.log(`🌀 Compiling...   TCKT for ${chainId} and address ${deployedAddress}`);
-  const compilerInput = {
+  const compilerInput = JSON.stringify({
     language: "Solidity",
     sources: processSources(readSources([
       "interfaces/Addresses.sol",
@@ -155,12 +153,18 @@ const deployToChain = async (chainId, privKey) => {
         }
       }
     },
-  }
-  const output = JSON.parse(solc.compile(JSON.stringify(compilerInput)));
-  const TCKT = output.contracts["TCKT.sol"]["TCKT"];
+  });
+  console.log(`💾 Saving:        ${chainId}.verify.json`);
+  writeFileSync(chainId + ".verify.json", compilerInput);
+
+  /** @const {string} */
+  const output = solc.compile(compilerInput);
+  /** @const {!Object} */
+  const solcJson = JSON.parse(output);
+  const TCKT = solcJson.contracts["TCKT.sol"]["TCKT"];
 
   console.log(`📏 Binary size:   ${TCKT.evm.bytecode.object.length / 2} bytes`);
-  if (chainId == "0xa86a") {
+  if (chainId.startsWith("0xa86")) {
     console.log(`🔺 Avalanche:     Comparing against foundry compiled binary`);
     compareAgainstFoundry(TCKT.evm.bytecode.object, chainId, wallet.address);
   }
@@ -181,13 +185,11 @@ const deployToChain = async (chainId, privKey) => {
   const milliToken = Number(estimatedGas * feeData.gasPrice / 1_000_000_000_000_000n);
   const tokenPrice = await getPrice(chainId);
   const usdValue = ((tokenPrice * milliToken) | 0) / 1000;
-  console.log(`💵 Estimated fee: ${milliToken / 1000} ${ChainData[chainId][2]} ` +
-    `(💰 ${usdValue})        assuming 🪙  = $${tokenPrice}`);
+  console.log(`💰 Estimated fee: ${milliToken / 1000} ${ChainData[chainId][2]} ` +
+    `($${usdValue})        assuming 🪙  = $${tokenPrice}`);
 
-  const contract = await factory.deploy({
-    maxFeePerGas: 25_000_000_000n,
-    maxPriorityFeePerGas: 0n,
-  });
+  if (nonce != 0) return;
+  const contract = await factory.deploy()
   console.log(`✨ Deployed:      ${contract.address}`);
   console.log(contract.deploymentTransaction);
 }

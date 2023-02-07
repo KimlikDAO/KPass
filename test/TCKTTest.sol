@@ -48,14 +48,14 @@ contract TCKTTest is Test {
 
     function testRevoke() public {
         assertEq(tckt.balanceOf(address(this)), 0);
-        tckt.create(123123123);
+        tckt.create{value: 0.075 ether}(123123123);
         assertEq(tckt.balanceOf(address(this)), 1);
         tckt.revoke();
         assertEq(tckt.balanceOf(address(this)), 0);
     }
 
     function testSocialRevoke() public {
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             123123123,
             [
                 (uint256(4) << 192) |
@@ -88,8 +88,9 @@ contract TCKTTest is Test {
     }
 
     function testRevokeFriendForContributor() public {
+        vm.deal(vm.addr(0x1337ACC), 1 ether);
         vm.prank(vm.addr(0x1337ACC));
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             123123123,
             [
                 (uint256(4) << 192) |
@@ -133,8 +134,9 @@ contract TCKTTest is Test {
     }
 
     function testRevokeFriendFor() public {
+        vm.deal(vm.addr(0x1337ACC), 1 ether);
         vm.prank(vm.addr(0x1337ACC));
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             123123123,
             [
                 (uint256(4) << 192) |
@@ -177,9 +179,10 @@ contract TCKTTest is Test {
     }
 
     function testRevokeFriendForIntegration() external {
+        vm.deal(vm.addr(1), 1 ether);
         vm.warp(11111);
         vm.prank(vm.addr(1));
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             123123123,
             [
                 (uint256(3) << 192) |
@@ -216,10 +219,10 @@ contract TCKTTest is Test {
         assertGe(tckt.lastRevokeTimestamp(vm.addr(1)), 99999);
     }
 
-    function testLastRevokeTimePreserved() public {
+    function testLastRevokeTimestampPreserved() public {
         // Even someone get their private key stolen, the thief should not be
         // able to reduce the `lastRevokeTime`.
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             1337,
             [
                 (uint256(7) << 192) |
@@ -261,7 +264,7 @@ contract TCKTTest is Test {
         assertGe(tckt.lastRevokeTimestamp(address(this)), 100);
 
         vm.warp(103);
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             1337,
             [
                 (uint256(7) << 192) |
@@ -278,7 +281,7 @@ contract TCKTTest is Test {
 
     function testRevokerWeightsCannotBeDecremented() public {
         // Consider a well intentioned social revoke TCKT ...
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             1337,
             [
                 (uint256(7) << 192) |
@@ -309,7 +312,7 @@ contract TCKTTest is Test {
             (uint256(1) << 160) | uint160(vm.addr(13)),
             (uint256(1) << 160) | uint160(vm.addr(14))
         ];
-        tckt.createWithRevokers(123123123, revokers);
+        tckt.createWithRevokers{value: 0.05 ether}(123123123, revokers);
 
         assertEq(tckt.balanceOf(address(this)), 1);
         tckt.reduceRevokeThreshold(1);
@@ -330,7 +333,7 @@ contract TCKTTest is Test {
             0,
             0
         ];
-        tckt.createWithRevokers(123123123, revokers);
+        tckt.createWithRevokers{value: 0.05 ether}(123123123, revokers);
 
         assertEq(tckt.balanceOf(address(this)), 1);
         tckt.addRevoker((uint256(3) << 160) | uint160(vm.addr(11)));
@@ -353,7 +356,7 @@ contract TCKTTest is Test {
             (uint256(10) << 160) | uint160(vm.addr(13)),
             (uint256(10) << 160) | uint160(vm.addr(14))
         ];
-        tckt.createWithRevokers(123123123, revokers);
+        tckt.createWithRevokers{value: 0.05 ether}(123123123, revokers);
         assertEq(tckt.balanceOf(address(this)), 1);
         assertEq(tckt.revokesRemaining(), 30);
         assertEq(tckt.revokerWeight(address(this), vm.addr(10)), 10);
@@ -439,7 +442,7 @@ contract TCKTTest is Test {
         tckt.create(123123123);
 
         vm.expectRevert();
-        tckt.create{value: 0.04 ether}(123123123);
+        tckt.create{value: 0.074 ether}(123123123);
 
         vm.prank(OYLAMA);
         tckt.updatePrice(4e16 << 160);
@@ -460,7 +463,7 @@ contract TCKTTest is Test {
         vm.expectRevert();
         tckt.update(1338);
 
-        tckt.create(1337);
+        tckt.create{value: 0.075 ether}(1337);
         tckt.update(1338);
     }
 
@@ -771,8 +774,8 @@ contract TCKTTest is Test {
     }
 
     function testViewFunctions() external {
-        tckt.create(0x1337ACC);
-        assertEq(tckt.handleOf(address(this)), 0x1337ACC);
+        tckt.create{value: 0.075 ether}(0x70CE4);
+        assertEq(tckt.handleOf(address(this)), 0x70CE4);
         assertEq(tckt.balanceOf(address(this)), 1);
         assertTrue(tckt.supportsInterface(type(IERC165).interfaceId));
     }
@@ -788,7 +791,7 @@ contract TCKTTest is Test {
         emit RevokerAssignment(address(this), vm.addr(10), 3);
         emit RevokerAssignment(address(this), vm.addr(11), 4);
         emit RevokerAssignment(address(this), vm.addr(12), 5);
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             0x1337cCc0,
             [
                 (uint256(7) << 192) |
@@ -805,7 +808,7 @@ contract TCKTTest is Test {
         assertEq(tckt.revokerWeight(address(this), vm.addr(12)), 5);
 
         vm.expectRevert();
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             0x1337cCc0,
             [
                 (uint256(7) << 192) |
@@ -818,7 +821,7 @@ contract TCKTTest is Test {
             ]
         );
         vm.expectRevert();
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             0x1337cCc0,
             [
                 (uint256(7) << 192) |
@@ -831,7 +834,7 @@ contract TCKTTest is Test {
             ]
         );
         vm.expectRevert();
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             0x1337cCc0,
             [
                 (uint256(7) << 192) |
@@ -844,7 +847,7 @@ contract TCKTTest is Test {
             ]
         );
         vm.expectRevert();
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             0x1337cCc0,
             [
                 (uint256(7) << 192) |
@@ -857,7 +860,7 @@ contract TCKTTest is Test {
             ]
         );
         vm.expectRevert();
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             0x1337cCc0,
             [
                 (uint256(7) << 192) |
@@ -870,7 +873,7 @@ contract TCKTTest is Test {
             ]
         );
         vm.expectRevert();
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             0x1337cCc0,
             [
                 (uint256(7) << 192) |
@@ -883,7 +886,7 @@ contract TCKTTest is Test {
             ]
         );
         vm.expectRevert();
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             0x1337cCc0,
             [
                 (uint256(7) << 192) |
@@ -896,7 +899,7 @@ contract TCKTTest is Test {
             ]
         );
         vm.expectRevert();
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             0x1337cCc0,
             [
                 (uint256(7) << 192) |
@@ -910,9 +913,10 @@ contract TCKTTest is Test {
         );
     }
 
-    function testLastRevokeTime() external {
+    function testLastRevokeTimestamp() external {
+        vm.deal(vm.addr(11), 1 ether);
         vm.startPrank(vm.addr(11));
-        tckt.create(0xAAAA);
+        tckt.create{value: 0.075 ether}(0xAAAA);
         vm.warp(1000);
         tckt.revoke();
 
@@ -923,7 +927,7 @@ contract TCKTTest is Test {
 
         assertGe(tckt.lastRevokeTimestamp(vm.addr(11)), 1000);
 
-        tckt.createWithRevokers(
+        tckt.createWithRevokers{value: 0.05 ether}(
             0xAAAA,
             [
                 (uint256(31) << 192) |
@@ -958,5 +962,16 @@ contract TCKTTest is Test {
         tckt.revokeFriend(vm.addr(11));
 
         assertEq(tckt.lastRevokeTimestamp(vm.addr(11)), 3004);
+    }
+
+    function testInitialPrices() external {
+        assertEq(uint128(tckt.priceIn(address(0))), 5e16);
+        assertEq(tckt.priceIn(address(0)) >> 128, 75e15);
+        assertEq(uint128(tckt.priceIn(address(USDT))), 1e6);
+        assertEq(tckt.priceIn(address(USDT)) >> 128, 1.5e6);
+        assertEq(uint128(tckt.priceIn(address(USDC))), 1e6);
+        assertEq(tckt.priceIn(address(USDC)) >> 128, 1.5e6);
+        assertEq(uint128(tckt.priceIn(address(TRYB))), 19e6);
+        assertEq(tckt.priceIn(address(TRYB)) >> 128, 28.5e6);
     }
 }

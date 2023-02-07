@@ -7,6 +7,12 @@ import {IDIDSigners, END_TS_OFFSET} from "interfaces/IDIDSigners.sol";
 import {IERC20, IERC20Permit} from "interfaces/IERC20Permit.sol";
 import {IERC721} from "interfaces/IERC721.sol";
 
+/**
+ * An ECDSA signature (over secp256k1 curve) represented in compact form.
+ *
+ * See https://eips.ethereum.org/EIPS/eip-2098 for more information
+ * on the compact form.
+ */
 struct Signature {
     bytes32 r;
     uint256 yParityAndS;
@@ -15,14 +21,88 @@ struct Signature {
 /**
  * @title KimlikDAO TCKT contract.
  *
- * TCKT is a non-transferable ID NFT, compliant with the ERC721 interface. The
- * transfer methods revert. The token URIs point to KimlikDAO protocol ipfs
- * endpoints and the metadata contents implement ERC721Unlockable, which is
- * a novel extension of ERC721Metadata.
+ * TCKT is a decentralized identifier (DID) NFT which can be minted by
+ * interacting with the KimlikDAO protocol. To interact with the protocol,
+ * one can use the reference dApp deployed at https://kimlikdao.org or run it
+ * locally by cloning the repo https://github.com/KimlikDAO/dapp and following
+ * the instructions therein.
  *
- * @author KimlikDAO
+ * Contents of each TCKT is cryptographically committed to a single EVM
+ * address, therefore a TCKT cannot be transferred to another address.
+ * TCKT implements most of the ERC-721 NFT interface excluding, notably, the
+ * transfer related methods.
+ *
+ * Minting
+ * =======
+ * One can mint a TCKT by using the various flavors of the `create()` method.
+ * These differ in the payment type and whether a revoker list is included.
+ * A discount is offerent for including a revoker list, which increases
+ * security as explained below.
+ *
+ * Revoking
+ * ========
+ * A TCKT owner may call the `revoke()` method of TCKT at any time
+ * to revoke it, thereby making it unusable. This is useful, for example,
+ * when a user gets their wallet private keys stolen.
+ *
+ * Social revoking
+ * ===============
+ * While minting a TCKT, one can nominate 3-5 addresses as revokers and give
+ * each of them a weight. If enough of these addreses vote to revoke this TCKT,
+ * the TCKT gets revoked and becomes unusable.
+ *
+ * This is useful if one gets their wallet private keys stolen and further
+ * does not have access to the keys themselves. In such cases, one can inform
+ * the nominated revokers and ask them to cast a revoke vote.
+ *
+ * To encourage setting up social revoke, a discount of 33% is offered
+ * initially, and the discount rate is determined by the DAO vote thereafter.
+ * The discount rate is set through the `updatePricesBulk()` method, which
+ * can only be called by `OYLAMA`, the KimlikDAO voting contract.
+ *
+ * Exposure report
+ * ===============
+ * In the case a TCKT holder
+ *
+ *   1) gets their private keys stolen, and
+ *   2) lose access to the keys themselves, and
+ *   3) did not set up social revoke when minting the TCKT,
+ *
+ * there is one final way of disabling the stolen TCKT. The victim mints a new
+ * TCKT and submits the `exposureReport` that comes with it to the
+ * `reportExposure()` method of this contract. Doing so will disable *all*
+ * previous TCKTs across all chains belonging to this person. For convenience,
+ * one may use the interface at https://kimlikdao.org/report to submit the
+ * `exposureReport` to the TCKT contract.
+ *
+ * Modifying the revoker list
+ * ==========================
+ * One can add new revokers, increase the weight of existing revokers or reduce
+ * the revoke threshold after minting their TCKT. Removing a revoker is not
+ * possible since it would allow an attacker having access to user private key to
+ * remove all revokers.
+ *
+ * Pricing and payments
+ * =====================
+ * The price of a TCKT is set by the `updatePrice()` or the `updatedPricesBulk()`
+ * methods, which can only be called by `OYLAMA`, the KimlikDAO voting
+ * contract.
+ * Fees collected as an ERC20 token are transferred directly to the
+ * `DAO_KASASI`, the KimlikDAO treasury and fees collected in the native token
+ * are accumulated in this contract first and then swept to `DAO_KASASI`
+ * periodically. The sweep mechanism was put in place to minimize the gas cost
+ * of minting a TCKT. The sweep is completely permissionless; anyone can call
+ * the `sweepNativeToken()` to transfer the native token balance over to
+ * `DAO_KASASI`. Further, weekly sweeps are done by KimlikDAO automation,
+ * covering the gas fee.
+ *
+ * @author KimlikDAO (https://kimlikdao.org)
  */
 contract TCKT is IERC721 {
+    /**
+     * Returns the IPFS handle (in compact form) of an address or zero if the
+     * address does not have a TCKT.
+     */
     mapping(address => uint256) public handleOf;
 
     function name() external pure override returns (string memory) {
@@ -34,21 +114,26 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice Returns the number of TCKTs in a given account, which is 0 or 1.
+     * Returns the number of TCKTs in a given account, which can be 0 or 1.
      *
-     * Each wallet can hold at most one TCKT, however a new TCKT can be minted
-     * to the same address at any time replacing the previous one, say after
-     * a personal information change occurs.
+     * Each account can hold at most one TCKT, however a new TCKT can be minted
+     * to the same address at any time replacing the previous one. While
+     * obtaining a TCKT is subject to KimlikDAO a fee, subsequent updates can
+     * be done by only covering the (inexpensive) network fee.
      */
     function balanceOf(address addr) external view override returns (uint256) {
         return handleOf[addr] == 0 ? 0 : 1;
     }
 
     /**
-     * @notice The URI of a given TCKT.
+     * Returns the URI of a TCKT with the given id (handle).
      *
-     * Note the tokenID of a TCKT is simply a compact representation of its
-     * IPFS handle so we simply base58 encode the array [0x12, 0x20, tokenID].
+     * @dev The handle of each TCKT is a compact representation of its IPFS
+     * cid. Given the handle, the IPFS cid can be obtained as
+     *
+     *     base58([0x12, 0x20, handle]).
+     *
+     * This method computes this value in a a gas efficient manner.
      */
     function tokenURI(uint256 id)
         external
@@ -77,9 +162,15 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice Here we claim to support the full ERC721 interface so that
-     * wallets recognize TCKT as an NFT, even though TCKTs transfer methods are
-     * disabled.
+     * Returns whether a given ERC-165 interface is supported.
+     *
+     * Here we claim to support the full ERC721 interface so that wallets
+     * recognize TCKT as an NFT, even though we do not implement transfer
+     * related methods.
+     *
+     * See https://eips.ethereum.org/EIPS/eip-165 for more information.
+     *
+     * @param                  interfaceId to check support for.
      */
     function supportsInterface(bytes4 interfaceId)
         external
@@ -94,7 +185,9 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice Creates a new TCKT and collects the fee in the native token.
+     * Creates a new TCKT and collects the fee in the native token.
+     *
+     * @param                  handle the compact encoding of the IPFS handle.
      */
     function create(uint256 handle) external payable {
         require(msg.value >= (priceIn[address(0)] >> 128));
@@ -103,31 +196,32 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice To minimize gas fees for TCKT buyers to the maximum extent, we
-     * do not forward fees collected in the networks native token to
-     * `DAO_KASASI` in each TCKT creation.
+     * Transfers the entire native token balance of this contract to
+     * `DAO_KASASI`.
      *
-     * Instead, the following method gives anyone the right to transfer the
-     * entire native token balance of this contract to `DAO_KASASI` at any
-     * time.
+     * @dev To optimize the TCKT creation gas fees we do not forward fees
+     * collected in the networks native token to `DAO_KASASI` in each TCKT
+     * creation.
      *
-     * Further, KimlikDAO does weekly sweeps, again using this method and
-     * covering the gas fee.
+     * Instead, the fees are accumulated in this contract until the following
+     * method is called. The method is fully permissionless and can be invoked
+     * by anyone. Further, KimlikDAO does weekly sweeps, again using this
+     * method and covering the gas fee.
      */
     function sweepNativeToken() external {
         DAO_KASASI.transfer(address(this).balance);
     }
 
     /**
-     * Moves ERC20 tokens sent to this address by accident to `DAO_KASASI`.
+     * Moves ERC-20 tokens sent to this address by accident to `DAO_KASASI`.
      */
     function sweepToken(IERC20 token) external {
         token.transfer(DAO_KASASI, token.balanceOf(address(this)));
     }
 
     /**
-     * @notice Creates a new TCKT with the given social revokers and collects
-     * the fee in the native token.
+     * Creates a new TCKT with the given social revokers and collects the fee
+     * in the native token.
      *
      * @param handle           IPFS handle of the persisted TCKT.
      * @param revokers         A list of pairs (weight, address), bit packed
@@ -147,6 +241,11 @@ contract TCKT is IERC721 {
     }
 
     /**
+     * Creates a new TCKT collecting the fee in the provided `token`.
+     *
+     * Note that this worke only with the DAO approved tokens: the token must
+     * be have been approved and set a price in by the DAO vote beforehand.
+     *
      * @param handle           IPFS handle of the persisted TCKT.
      * @param token            Contract address of a IERC20 token.
      */
@@ -159,7 +258,8 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice Creates a TCKT and collects the fee in the provided `token`.
+     * Creates a TCKT and collects the fee in the provided `token` using the
+     * provided ERC-2612 permit signature.
      *
      * The provided token has to be IERC20Permit, in particular, it needs to
      * support approval by signature.
@@ -168,6 +268,9 @@ contract TCKT is IERC721 {
      * payment and this method is called, the method call will fail as the
      * signature will be invalid. However, the price changes happen at most
      * once a week and off peak hours by an autonomous vote of TCKO holders.
+     *
+     * See https://eips.ethereum.org/EIPS/eip-2612 for more information on the
+     * ERC-20 permit extension.
      *
      * @param handle           IPFS handle of the persisted TCKT.
      * @param deadlineAndToken Contract address of a IERC20Permit token and
@@ -272,17 +375,17 @@ contract TCKT is IERC721 {
         0xe0b70ef26ac646b5fe42b7831a9d039e8afa04a2698e03b3321e5ca3516efe70;
 
     /**
-     * Creates a TCKT on users behalf, covering the tx fee.
+     * Creates a TCKT on users behalf, covering the transaction fee.
      *
      * The user has to explicitly authorize the TCKT creation with the
      * `createSig` and the token payment with the `paymentSig`.
      *
      * The gas fee is paid by the transaction sender, which can be either
-     * `OYLAMA` or `TCKT_DEPLOYER`. We gate the method to these two addresses
-     * since the intent of a signature request is not as clear as that of a
-     * transaction and therefore a user may be tricked into creating a TCKT
-     * with incorrect and invalid contents. Note this restriction is not about
-     * TCKTs soundness; even if we made this method unrestricted, only the
+     * `OYLAMA` or `TCKT_DEPLOYER`. We restrict the method to these two
+     * addresses since the intent of a signature request is not as clear as
+     * that of a transaction and therefore a user may be tricked into creating
+     * a TCKT with incorrect and invalid contents. Note this restriction is not
+     * about TCKTs soundness; even if we made this method unrestricted, only the
      * account owner could have created a valid TCKT. Still, we don't want
      * users to be tricked into creating invalid TCKTs for whatever reason.
      *
@@ -537,6 +640,24 @@ contract TCKT is IERC721 {
     uint256 private revokerlessPremium = (3 << 128) | uint256(2);
 
     mapping(address => uint256) public priceIn;
+
+    constructor() {
+        priceIn[0x0000000000000000000000000000000000000000] =
+            (75e15 << 128) |
+            50e15;
+        priceIn[0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7] =
+            (15e5 << 128) |
+            10e5;
+        priceIn[0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E] =
+            (15e5 << 128) |
+            10e5;
+        priceIn[0x564A341Df6C126f90cf3ECB92120FD7190ACb401] =
+            ((285e5) << 128) |
+            190e5;
+        priceIn[0x9C9e5fD8bbc25984B178FdCE6117Defa39d2db39] =
+            (15e17 << 128) |
+            10e17;
+    }
 
     /**
      * @notice Updates TCKT prices in a given list of tokens.
