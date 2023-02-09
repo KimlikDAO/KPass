@@ -4,6 +4,9 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 import "interfaces/Addresses.sol";
+import {IDAOKasasi, AMOUNT_OFFSET, SUPPLY_OFFSET} from "interfaces/IDAOKasasi.sol";
+import {MockDAOKasasi} from "interfaces/testing/MockDAOKasasi.sol";
+import {MockDAOKasasiV1} from "interfaces/testing/MockDAOKasasiV1.sol";
 import {MockERC20Permit} from "interfaces/testing/MockTokens.sol";
 import {Signature, TCKT} from "contracts/TCKT.sol";
 import {TCKTSigners} from "contracts/TCKTSigners.sol";
@@ -153,5 +156,43 @@ contract TCKTIntegrationTest is Test {
             1111,
             [sigs[0], sigs[1], sigs[2]]
         );
+    }
+
+    function testSweepNativeToken() external {
+        vm.startPrank(DAO_KASASI_DEPLOYER);
+        IDAOKasasi daoKasasi = IDAOKasasi(address(new MockDAOKasasi()));
+        new MockDAOKasasiV1();
+        vm.stopPrank();
+
+        assertEq(address(daoKasasi), DAO_KASASI);
+
+        vm.deal(vm.addr(1), 0.1e18);
+        vm.prank(vm.addr(1));
+        // Overpay by 0.005.
+        tckt.create{value: 0.080e18}(0x9991);
+
+        vm.prank(address(0xDEAD));
+        tckt.sweepNativeToken();
+
+        assertEq(DAO_KASASI.balance, 0.08e18);
+
+        vm.deal(vm.addr(2), 0.2e18);
+        vm.prank(vm.addr(2));
+        tckt.create{value: 0.075e18}(0x9992);
+        tckt.create{value: 0.075e18}(0x99922);
+
+        vm.prank(address(0xACC));
+        tckt.sweepNativeToken();
+
+        assertEq(DAO_KASASI.balance, 0.23e18);
+
+        vm.prank(TCKO_ADDR);
+        daoKasasi.redeem(
+            (uint256(1) << AMOUNT_OFFSET) |
+                (uint256(1) << SUPPLY_OFFSET) |
+                uint160(vm.addr(3))
+        );
+
+        assertEq(vm.addr(3).balance, 0.23e18);
     }
 }
