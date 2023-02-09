@@ -14,7 +14,7 @@ transfer-related methods, since TCKTs are non-transferrable.
 
 The contents of a TCKT are encrypted by the owners private keys in their
 browser and then stored on the IPFS compatible storage layer of the KimlikDAO
-protocol. The reason we do not use the IPFS network but a compatible 
+protocol. The reason we do not use the IPFS network but a compatible
 subnetwork run by KimlikDAO protocol nodes is that some jurisdictions
 require personal information to be stored in certain geo locations, even
 if the data is encrypted and even if it's encrypted by the user themselves.
@@ -30,14 +30,14 @@ giving the user the freedom to delete their persisted data at any time
 
 One can mint a TCKT by using the various flavors of the [`create()`](https://github.com/KimlikDAO/TCKT/blob/main/contracts/TCKT.sol#L192-L196) method.
 These methods differ in the payment type and whether a revoker list is
-included. A discount is offered for including a revoker list, which increases
-security as explained below.
+included. A discount is offered for including a revoker list, which
+increases security as explained below.
 
 ### Revoking
 
-A TCKT owner may call the `revoke()` method of TCKT at any time
-to revoke it, thereby making it unusable. This is useful, for example,
-when a user gets their wallet private keys stolen.
+A TCKT owner may call the `revoke()` method of TCKT at any time to revoke
+it, thereby making it unusable. This is useful, for example, when a user
+gets their wallet private keys stolen.
 
 ### Social revoking
 

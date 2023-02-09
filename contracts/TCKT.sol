@@ -19,7 +19,7 @@ struct Signature {
 }
 
 /**
- * @title KimlikDAO TCKT contract.
+ * @title TCKT: KimlikDAO DID Token.
  *
  * TCKT is a decentralized identifier (DID) NFT which can be minted by
  * interacting with the KimlikDAO protocol. To interact with the protocol,
@@ -27,41 +27,42 @@ struct Signature {
  * locally by cloning the repo https://github.com/KimlikDAO/dapp and following
  * the instructions therein.
  *
- * Contents of each TCKT is cryptographically committed to a single EVM
- * address, therefore a TCKT cannot be transferred to another address.
+ * The contents of each TCKT is cryptographically committed to a single EVM
+ * address, making it unusable from any other address.
  * TCKT implements most of the ERC-721 NFT interface excluding, notably, the
- * transfer related methods.
+ * transfer-related methods, since TCKTs are non-transferrable.
  *
  * Minting
- * =======
+ * ========
  * One can mint a TCKT by using the various flavors of the `create()` method.
- * These differ in the payment type and whether a revoker list is included.
- * A discount is offerent for including a revoker list, which increases
- * security as explained below.
+ * These methods differ in the payment type and whether a revoker list is
+ * included. A discount is offerent for including a revoker list, which
+ * increases security as explained below.
  *
  * Revoking
- * ========
- * A TCKT owner may call the `revoke()` method of TCKT at any time
- * to revoke it, thereby making it unusable. This is useful, for example,
- * when a user gets their wallet private keys stolen.
+ * =========
+ * A TCKT owner may call the `revoke()` method of TCKT at any time to revoke
+ * it, thereby making it unusable. This is useful, for example, when a user
+ * gets their wallet private keys stolen.
  *
  * Social revoking
- * ===============
- * While minting a TCKT, one can nominate 3-5 addresses as revokers and give
- * each of them a weight. If enough of these addreses vote to revoke this TCKT,
- * the TCKT gets revoked and becomes unusable.
+ * ================
+ * When minting a TCKT, you can nominate 3-5 addresses as revokers and assign
+ * each a weight. If enough of these addresses vote to revoke the TCKT, it will
+ * be revoked and become unusable.
  *
- * This is useful if one gets their wallet private keys stolen and further
- * does not have access to the keys themselves. In such cases, one can inform
- * the nominated revokers and ask them to cast a revoke vote.
+ * This feature is useful in the event that your wallet private keys are stolen
+ * and, further, you no longer have access to them. In such circumstances, you
+ * can inform the nominated revokers and request them to cast a revoke vote.
  *
  * To encourage setting up social revoke, a discount of 33% is offered
  * initially, and the discount rate is determined by the DAO vote thereafter.
- * The discount rate is set through the `updatePricesBulk()` method, which
- * can only be called by `OYLAMA`, the KimlikDAO voting contract.
+ * The discount rate is set through the `updatePricesBulk()` method, which can
+ * only be called by `OYLAMA`, the KimlikDAO voting contract.
+ * (https://github.com/KimlikDAO/Oylama)
  *
  * Exposure report
- * ===============
+ * ================
  * In the case a TCKT holder
  *
  *   1) gets their private keys stolen, and
@@ -76,7 +77,7 @@ struct Signature {
  * `exposureReport` to the TCKT contract.
  *
  * Modifying the revoker list
- * ==========================
+ * ===========================
  * One can add new revokers, increase the weight of existing revokers or reduce
  * the revoke threshold after minting their TCKT. Removing a revoker is not
  * possible since it would allow an attacker having access to user private key to
@@ -119,7 +120,7 @@ contract TCKT is IERC721 {
      * Each account can hold at most one TCKT, however a new TCKT can be minted
      * to the same address at any time replacing the previous one. While
      * obtaining a TCKT is subject to KimlikDAO a fee, subsequent updates can
-     * be done by only covering the (inexpensive) network fee.
+     * be done by only covering the network fee.
      */
     function balanceOf(address addr) external view override returns (uint256) {
         return handleOf[addr] == 0 ? 0 : 1;
