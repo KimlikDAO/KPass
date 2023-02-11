@@ -33,28 +33,28 @@ const ChainData = {
 /** @const {!Object<string, !Array<TokenInfo>>} */
 const TokenData = {
   "0x1": [{
-      computed: 0.0006
-    }, /** @type {!TokenInfo} */({
-      address: "dAC17F958D2ee523a2206206994597C13D831ec7",
-      name: "Tether USD",
-      decimals: 6,
-      version: 0
-    }), /** @type {!TokenInfo} */({
-      address: "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-      name: "USD Coin",
-      decimals: 6,
-      version: 2
-    }), /** @type {!TokenInfo} */({
-      address: "2C537E5624e4af88A7ae4060C022609376C8D0EB",
-      name: "BiLira",
-      decimals: 6,
-      version: 0
-    }), /** @type {!TokenInfo} */({
-      address: "4Fabb145d64652a948d72533023f6E7A623C7C53",
-      name: "Binance USD",
-      decimals: 18,
-      version: 0
-    })
+    computed: 0.0006
+  }, /** @type {!TokenInfo} */({
+    address: "dAC17F958D2ee523a2206206994597C13D831ec7",
+    name: "Tether USD",
+    decimals: 6,
+    version: 0
+  }), /** @type {!TokenInfo} */({
+    address: "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    name: "USD Coin",
+    decimals: 6,
+    version: 2
+  }), /** @type {!TokenInfo} */({
+    address: "2C537E5624e4af88A7ae4060C022609376C8D0EB",
+    name: "BiLira",
+    decimals: 6,
+    version: 0
+  }), /** @type {!TokenInfo} */({
+    address: "4Fabb145d64652a948d72533023f6E7A623C7C53",
+    name: "Binance USD",
+    decimals: 18,
+    version: 0
+  })
   ],
   "0xa86a": [
     null, /** @type {!TokenInfo} */({
@@ -296,9 +296,12 @@ const deployToChain = async (chainId, privKey) => {
     `($${usdValue})        assuming 🪙  = $${tokenPrice}`);
 
   if (nonce != 0) return;
-  const contract = await factory.deploy()
-  console.log(`✨ Deployed:      ${contract.address}`);
-  console.log(contract.deploymentTransaction);
+  console.log(feeData);
+  const contract = await factory.deploy({
+    maxFeePerGas: 37_000_000_000n,
+    maxPriorityFeePerGas: 1_000_000_000n
+  });
+  console.log(contract);
 }
 
-deployToChain("0xa869", "0x32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33");
+deployToChain("0xa86a", "0x32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33");

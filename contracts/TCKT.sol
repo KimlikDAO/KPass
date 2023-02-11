@@ -41,14 +41,15 @@ struct Signature {
  *
  * Revoking
  * =========
- * A TCKT owner may call the `revoke()` method of TCKT at any time to revoke
+ * A TCKT owner may call the `revoke()` method of a TCKT at any time to revoke
  * it, thereby making it unusable. This is useful, for example, when a user
  * gets their wallet private keys stolen.
  *
  * Social revoking
  * ================
- * When minting a TCKT, you can nominate 3-5 addresses as revokers and assign
- * each a weight. If enough of these addresses vote to revoke the TCKT, it will
+ * When minting a TCKT, you can nominate 3-5 addresses as revokers, assign each
+ * a weight and choose a revoke threshold. If enough of these addresses vote to
+ * revoke the TCKT (with total weight at least the chosen threshold), it will
  * be revoked and become unusable.
  *
  * This feature is useful in the event that your wallet private keys are stolen
@@ -79,30 +80,31 @@ struct Signature {
  * Modifying the revoker list
  * ===========================
  * One can add new revokers, increase the weight of existing revokers or reduce
- * the revoke threshold after minting their TCKT. Removing a revoker is not
- * possible since it would allow an attacker having access to user private key to
- * remove all revokers.
+ * the revoke threshold after minting their TCKT by invoking the corresponding
+ * methods of this contract. Removing a revoker is not possible since it would
+ * allow an attacker having access to user privates key to remove all revokers.
  *
  * Pricing and payments
  * =====================
- * The price of a TCKT is set by the `updatePrice()` or the `updatedPricesBulk()`
+ * The price of a TCKT is set by the `updatePrice()` or the `updatePricesBulk()`
  * methods, which can only be called by `OYLAMA`, the KimlikDAO voting
  * contract.
- * Fees collected as an ERC20 token are transferred directly to the
+ *
+ * Fees collected as an ERC-20 token are transferred directly to the
  * `DAO_KASASI`, the KimlikDAO treasury and fees collected in the native token
  * are accumulated in this contract first and then swept to `DAO_KASASI`
  * periodically. The sweep mechanism was put in place to minimize the gas cost
  * of minting a TCKT. The sweep is completely permissionless; anyone can call
- * the `sweepNativeToken()` to transfer the native token balance over to
- * `DAO_KASASI`. Further, weekly sweeps are done by KimlikDAO automation,
- * covering the gas fee.
+ * the `sweepNativeToken()` to transfer the native token balance of this
+ * contract over to `DAO_KASASI`. Further, weekly sweeps are done by KimlikDAO
+ * automation, covering the gas fee.
  *
  * @author KimlikDAO (https://kimlikdao.org)
  */
 contract TCKT is IERC721 {
     /**
-     * Returns the IPFS handle (in compact form) of an address or zero if the
-     * address does not have a TCKT.
+     * Returns the KimlikDAO protocol IPFS handle (in compact form) of an
+     * address or zero if the address does not have a TCKT.
      */
     mapping(address => uint256) public handleOf;
 
@@ -119,8 +121,8 @@ contract TCKT is IERC721 {
      *
      * Each account can hold at most one TCKT, however a new TCKT can be minted
      * to the same address at any time replacing the previous one. While
-     * obtaining a TCKT is subject to KimlikDAO a fee, subsequent updates can
-     * be done by only covering the network fee.
+     * obtaining a TCKT is subject to a KimlikDAO fee, subsequent updates can
+     * be done by only paying the network fee.
      */
     function balanceOf(address addr) external view override returns (uint256) {
         return handleOf[addr] == 0 ? 0 : 1;
@@ -129,8 +131,9 @@ contract TCKT is IERC721 {
     /**
      * Returns the URI of a TCKT with the given id (handle).
      *
-     * @dev The handle of each TCKT is a compact representation of its IPFS
-     * cid. Given the handle, the IPFS cid can be obtained as
+     * @dev The handle of each TCKT is a compact representation of its
+     * KimlikDAO protocol IPFS cid. Given the handle, the IPFS cid can be
+     * obtained as
      *
      *     base58([0x12, 0x20, handle]).
      *
@@ -165,9 +168,9 @@ contract TCKT is IERC721 {
     /**
      * Returns whether a given ERC-165 interface is supported.
      *
-     * Here we claim to support the full ERC721 interface so that wallets
+     * Here we claim to support the full ERC-721 interface so that wallets
      * recognize TCKT as an NFT, even though we do not implement transfer
-     * related methods.
+     * related methods since TCKTs are non-transferrable.
      *
      * See https://eips.ethereum.org/EIPS/eip-165 for more information.
      *
@@ -200,7 +203,7 @@ contract TCKT is IERC721 {
      * Transfers the entire native token balance of this contract to
      * `DAO_KASASI`.
      *
-     * @dev To optimize the TCKT creation gas fees we do not forward fees
+     * @dev To optimize the TCKT creation gas fees, we do not forward fees
      * collected in the networks native token to `DAO_KASASI` in each TCKT
      * creation.
      *
@@ -208,6 +211,9 @@ contract TCKT is IERC721 {
      * method is called. The method is fully permissionless and can be invoked
      * by anyone. Further, KimlikDAO does weekly sweeps, again using this
      * method and covering the gas fee.
+     *
+     * @dev `DAO_KASASI` has an empty `receive()` method therefore the
+     * `transfer()` below should have enough gas to complete.
      */
     function sweepNativeToken() external {
         DAO_KASASI.transfer(address(this).balance);
@@ -244,11 +250,11 @@ contract TCKT is IERC721 {
     /**
      * Creates a new TCKT collecting the fee in the provided `token`.
      *
-     * Note that this worke only with the DAO approved tokens: the token must
-     * be have been approved and set a price in by the DAO vote beforehand.
+     * This method works only with DAO approved tokens: the token must have
+     * been approved and set a nonzero price by the DAO vote beforehand.
      *
      * @param handle           IPFS handle of the persisted TCKT.
-     * @param token            Contract address of a IERC20 token.
+     * @param token            Contract address of an ERC-20 token.
      */
     function createWithTokenPayment(uint256 handle, IERC20 token) external {
         uint256 price = priceIn[address(token)] >> 128;
@@ -268,7 +274,7 @@ contract TCKT is IERC721 {
      * Note if a price change occurs between the moment the user signs off the
      * payment and this method is called, the method call will fail as the
      * signature will be invalid. However, the price changes happen at most
-     * once a week and off peak hours by an autonomous vote of TCKO holders.
+     * once a week and off peak hours by the DAO vote.
      *
      * See https://eips.ethereum.org/EIPS/eip-2612 for more information on the
      * ERC-20 permit extension.
@@ -387,7 +393,7 @@ contract TCKT is IERC721 {
      * that of a transaction and therefore a user may be tricked into creating
      * a TCKT with incorrect and invalid contents. Note this restriction is not
      * about TCKTs soundness; even if we made this method unrestricted, only the
-     * account owner could have created a valid TCKT. Still, we don't want
+     * account owner could have created a valid TCKT. Still, we do not want
      * users to be tricked into creating invalid TCKTs for whatever reason.
      *
      * @param handle           IPFS handle with which to create the TCKT.
@@ -438,7 +444,7 @@ contract TCKT is IERC721 {
 
     /**
      * @param handle           Updates the contents of the TCKT with the given
-     *                         IFPS handle.
+     *                         IPFS handle.
      */
     function update(uint256 handle) external {
         require(handleOf[msg.sender] != 0);
@@ -475,6 +481,16 @@ contract TCKT is IERC721 {
         return revokeInfo[msg.sender] >> 192;
     }
 
+    /**
+     * Returns the timestamp of the most recent revoke event for this account.
+     *
+     * All TCKTs obtained before this timestamp on this address across all
+     * chains are considered invalid.
+     *
+     * If no revoke event happened, the zero value is returned.
+     *
+     * @return timestamp of the last revoke event, or zero if none happened.
+     */
     function lastRevokeTimestamp(address addr) external view returns (uint64) {
         return uint64(revokeInfo[addr]);
     }
@@ -514,10 +530,9 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice Revokes users own TCKT.
+     * Revokes user's own TCKT, rendering it invalid.
      *
-     * The user has the right to delete their own TCKT at any time using this
-     * method.
+     * The owner may delete their TCKT at any time using this method.
      */
     function revoke() external {
         emit Transfer(msg.sender, address(this), handleOf[msg.sender]);
@@ -526,11 +541,12 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice Cast a "social revoke" vote to a friends TCKT.
+     * Casts a "social revoke" vote on a friends TCKT.
      *
-     * If a friend gave the user a nonzero social revoke weight, the user can
-     * use this method to vote "social revoke" of their friends TCKT. After
-     * calling this method, the users revoke weight is zeroed.
+     * If a friend has granted the user a nonzero "social revoke" weight, the
+     * user can invoke this method to cast a "social revoke" vote on their
+     * friends TCKT. After calling this method, the users revoke weight is set
+     * to zero.
      *
      * @param friend           The wallet address of a friends TCKT.
      */
@@ -553,13 +569,12 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * Cast a social revoke vote for a friend on `signature` creators behalf.
+     * Casts a social revoke vote for a friend on `signature` creators behalf.
      *
      * This method is particularly useful when the revoker is virtual; the TCKT
      * owner generates a private key and immediately signs a `revokeFriendFor`
-     * request and e-mails the signature to a fiend. This way a friend who
-     * doesn't have an EVM adress (but an email address) can cast a social
-     * revoke vote.
+     * request and emails the signature to a fiend. This way a friend without an
+     * EVM adress (but an email address) can cast a social revoke vote.
      *
      * @param friend           Account whose TCKT will be cast a revoke vote.
      * @param signature        Signature from the revoker, authorizing a revoke
@@ -600,9 +615,13 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice Add a revoker or increase a revokers weight.
+     * Adds a revoker or increase a revokers weight.
      *
-     * @param deltaAndRevoker  Address who is given the revoke vote permission.
+     * @param deltaAndRevoker  Address who is given the revoke vote permission
+     *                         and the added weight packed into a single word.
+     *                         The first 4 bytes have to be zero, the following
+     *                         8 bytes encode the added weight and the last 20
+     *                         bytes are the revoker address.
      */
     function addRevoker(uint256 deltaAndRevoker) external {
         address revoker = address(uint160(deltaAndRevoker));
@@ -619,7 +638,7 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice Reduce revoker threshold by given amount.
+     * Reduces a TCKTs revoke threshold by the given amount.
      *
      * @param reduce           The amount to reduce.
      */
@@ -636,10 +655,23 @@ contract TCKT is IERC721 {
 
     event PriceChange(address indexed token, uint256 price);
 
-    /// The multiplicative premium for getting a TCKT wihout setting up social
-    /// revoke. The initial value is 3/2, and adjusted by DAO vote.
+    /**
+     * The multiplicative premium for getting a TCKT wihout setting up social
+     * revoke. The initial value is 3/2, and adjusted by the DAO vote
+     * thereafter.
+     */
     uint256 private revokerlessPremium = (3 << 128) | uint256(2);
 
+    /**
+     * The price of creating a TCKT with and without a revoker list denominated
+     * in a given token.
+     *
+     * The first 128 bytes of the returned vaule denotes the price without a
+     * revoker list and the last 128 bytes are the discounted price for setting
+     * up social revoke.
+     *
+     * The address 0 is understood as the native token.
+     */
     mapping(address => uint256) public priceIn;
 
     constructor() {
@@ -661,7 +693,7 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * @notice Updates TCKT prices in a given list of tokens.
+     * Updates TCKT prices in a given list of tokens.
      *
      * @param premium          The multiplicative price premium for getting a
      *                         TCKT without specifying a social revokers list.
@@ -688,10 +720,10 @@ contract TCKT is IERC721 {
     }
 
     /**
-     * Updates the price of a TCKT denominated in a certain token.
+     * Updates the price of a TCKT denominated in a given token.
      *
      * @param priceAndToken    The price as a 96 bit integer, followed by the
-     *                         token address for a IERC20 token or the zero
+     *                         token address for a ERC-20 token or the zero
      *                         address, which is understood as the native
      *                         token.
      */
@@ -713,21 +745,27 @@ contract TCKT is IERC721 {
     //
     ///////////////////////////////////////////////////////////////////////////
 
-    /// @notice When a TCKT holder gets their wallet private key exposed
-    /// they can either revoke their TCKT themselves, or use social revoking.
-    ///
-    /// If they are unable to do either, they need to obtain a new TCKT (to a
-    /// new address), with which they can file an exposure report via the
-    /// `reportExposure()` method. Doing so invalidates all TCKTs they have
-    /// obtained before the timestamp of their most recent TCKT.
+    /**
+     * @notice When a TCKT holder gets their wallet private key exposed
+     * they can either revoke their TCKT themselves, or use social revoking.
+     *
+     * If they are unable to do either, they need to obtain a new TCKT (to a
+     * new address), with which they can file an exposure report via the
+     * `reportExposure()` method. Doing so invalidates all TCKTs across all
+     * chains and all addresses they have obtained before the timestamp of this
+     * newly obtained TCKT.
+     */
     event ExposureReport(bytes32 indexed exposureReportID, uint256 timestamp);
 
-    /// Maps a `exposureReportID` to a reported exposure timestamp,
-    /// or zero if no exposure has been reported.
+    /**
+     * Maps a `exposureReportID` to a reported exposure timestamp, or zero if
+     * no exposure has been reported.
+     */
     mapping(bytes32 => uint256) public exposureReported;
 
     /**
-     * @notice Add a `exposureReportID` to exposed list.
+     * Adds an `exposureReportID` to the exposed list.
+     *
      * A nonce is not needed since the `exposureReported[exposureReportID]`
      * value can only be incremented.
      *
