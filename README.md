@@ -1,6 +1,6 @@
 ## TCKT: KimlikDAO DID Token
 
-<img align="right" width="300" height="300" src="images/cover.svg">
+<img align="right" width="300" height="300" src="https://kimlikdao.org/TCKT.svg">
 TCKT is a decentralized identifier (DID) NFT which can be minted by
 interacting with the KimlikDAO protocol. To interact with the protocol,
 one can use the reference dApp deployed at https://kimlikdao.org or run it
@@ -68,7 +68,7 @@ TCKT and submits the `exposureReport` that comes with it to the
 [`reportExposure()`](https://github.com/KimlikDAO/TCKT/blob/main/contracts/TCKT.sol#L737-L776)
 method of this contract. Doing so will disable _all_
 previous TCKTs across _all chains_ belonging to this person. For convenience,
-one may use the interface at https://kimlikdao.org/report to submit the
+one may use the interface at https://kimlikdao.org/revoke to submit the
 `exposureReport` to the TCKT contract.
 
 ### Modifying the revoker list
