@@ -9,12 +9,12 @@ import {SignerInfo} from "interfaces/IDIDSigners.sol";
 import {KDAO_DEPLOYER, KPASS_SIGNERS_DEPLOYER, VOTING} from "interfaces/Addresses.sol";
 
 contract kpassSignersTest is Test {
-    MockERC20Permit private tcko;
+    MockERC20Permit private kdao;
     KimlikDAOPassSigners private kpassSigners;
 
     function setUp() external {
         vm.prank(KDAO_DEPLOYER);
-        tcko = new MockERC20Permit("TCKO", "TCKO", 6);
+        kdao = new MockERC20Permit("KDAO", "KDAO", 6);
 
         vm.prank(KPASS_SIGNERS_DEPLOYER);
         kpassSigners = new KimlikDAOPassSigners();
@@ -26,16 +26,16 @@ contract kpassSignersTest is Test {
     function prepareSigners() public {
         for (uint256 i = 1; i <= 20; ++i) {
             vm.startPrank(vm.addr(i));
-            tcko.mint(1e12);
-            tcko.approve(address(kpassSigners), 1e12);
+            kdao.mint(1e12);
+            kdao.approve(address(kpassSigners), 1e12);
             vm.stopPrank();
         }
     }
 
     function testTCKOstInterface() external view {
-        assertEq(kpassSigners.name(), "Staked TCKO");
-        assertEq(kpassSigners.symbol(), "TCKO-st");
-        assertEq(kpassSigners.decimals(), tcko.decimals());
+        assertEq(kpassSigners.name(), "Staked KDAO");
+        assertEq(kpassSigners.symbol(), "KDAO-st");
+        assertEq(kpassSigners.decimals(), kdao.decimals());
     }
 
     function testAuthorization() external {
@@ -61,8 +61,8 @@ contract kpassSignersTest is Test {
         kpassSigners.approveSignerNode(vm.addr(2));
 
         vm.startPrank(vm.addr(2));
-        tcko.approve(address(kpassSigners), kpassSigners.stakingDeposit());
-        tcko.mint(kpassSigners.stakingDeposit());
+        kdao.approve(address(kpassSigners), kpassSigners.stakingDeposit());
+        kdao.mint(kpassSigners.stakingDeposit());
         vm.stopPrank();
 
         vm.prank(VOTING);
@@ -71,13 +71,13 @@ contract kpassSignersTest is Test {
 
     function testStateTransition() external {
         vm.startPrank(vm.addr(1));
-        tcko.mint(1e12);
-        tcko.approve(address(kpassSigners), 1e12);
+        kdao.mint(1e12);
+        kdao.approve(address(kpassSigners), 1e12);
         vm.stopPrank();
 
         vm.startPrank(vm.addr(2));
-        tcko.mint(1e12);
-        tcko.approve(address(kpassSigners), 1e12);
+        kdao.mint(1e12);
+        kdao.approve(address(kpassSigners), 1e12);
         vm.stopPrank();
 
         vm.startPrank(vm.addr(1));
@@ -123,18 +123,18 @@ contract kpassSignersTest is Test {
         kpassSigners.withdraw();
         vm.stopPrank();
 
-        assertEq(tcko.balanceOf(vm.addr(1)), 2e12);
+        assertEq(kdao.balanceOf(vm.addr(1)), 2e12);
     }
 
     function testSlashWhileUnstaking() external {
         vm.startPrank(vm.addr(1));
-        tcko.mint(1e12);
-        tcko.approve(address(kpassSigners), 1e12);
+        kdao.mint(1e12);
+        kdao.approve(address(kpassSigners), 1e12);
         vm.stopPrank();
 
         vm.startPrank(vm.addr(2));
-        tcko.mint(1e12);
-        tcko.approve(address(kpassSigners), 1e12);
+        kdao.mint(1e12);
+        kdao.approve(address(kpassSigners), 1e12);
         vm.stopPrank();
 
         vm.startPrank(VOTING);
@@ -191,13 +191,13 @@ contract kpassSignersTest is Test {
 
         vm.prank(vm.addr(5));
         kpassSigners.unstake();
-        assertEq(tcko.balanceOf(vm.addr(5)), 0);
+        assertEq(kdao.balanceOf(vm.addr(5)), 0);
         assertEq(kpassSigners.balanceOf(vm.addr(5)), 1e12);
 
         vm.warp(6 + 30 days);
         vm.prank(vm.addr(5));
         kpassSigners.withdraw();
-        assertEq(tcko.balanceOf(vm.addr(5)), 1e12);
+        assertEq(kdao.balanceOf(vm.addr(5)), 1e12);
         assertEq(kpassSigners.balanceOf(vm.addr(5)), 0);
     }
 
@@ -253,8 +253,8 @@ contract kpassSignersTest is Test {
 
         vm.warp(6);
         vm.startPrank(vm.addr(101));
-        tcko.mint(10e12);
-        tcko.approve(address(kpassSigners), 10e12);
+        kdao.mint(10e12);
+        kdao.approve(address(kpassSigners), 10e12);
         kpassSigners.jointDeposit(10e12);
         vm.stopPrank();
 
@@ -266,8 +266,8 @@ contract kpassSignersTest is Test {
     function testJointDepositBalanceOf() external {
         prepareSigners();
         vm.startPrank(vm.addr(100));
-        tcko.mint(100e12);
-        tcko.approve(address(kpassSigners), 100e12);
+        kdao.mint(100e12);
+        kdao.approve(address(kpassSigners), 100e12);
         vm.stopPrank();
 
         for (uint256 t = 1; t < 20; t += 2) {
@@ -317,23 +317,23 @@ contract kpassSignersTest is Test {
         prepareSigners();
         vm.prank(VOTING);
         kpassSigners.approveSignerNode(vm.addr(1));
-        assertEq(tcko.balanceOf(address(kpassSigners)), kpassSigners.stakingDeposit());
+        assertEq(kdao.balanceOf(address(kpassSigners)), kpassSigners.stakingDeposit());
         vm.prank(VOTING);
         kpassSigners.approveSignerNode(vm.addr(2));
-        assertEq(tcko.balanceOf(address(kpassSigners)), 2 * kpassSigners.stakingDeposit());
+        assertEq(kdao.balanceOf(address(kpassSigners)), 2 * kpassSigners.stakingDeposit());
         assertFalse(kpassSigners.approve(address(this), 0));
         assertEq(kpassSigners.allowance(address(this), address(this)), 0);
         assertFalse(kpassSigners.transfer(address(this), 1));
 
-        assertEq(kpassSigners.totalSupply(), tcko.balanceOf(address(kpassSigners)));
-        assertEq(kpassSigners.decimals(), tcko.decimals());
+        assertEq(kpassSigners.totalSupply(), kdao.balanceOf(address(kpassSigners)));
+        assertEq(kpassSigners.decimals(), kdao.decimals());
     }
 
     function testStateTransitionMultiple() external {
         for (uint256 t = 1; t <= 10; ++t) {
             vm.startPrank(vm.addr(t));
-            tcko.mint(1e12);
-            tcko.approve(address(kpassSigners), 1e12);
+            kdao.mint(1e12);
+            kdao.approve(address(kpassSigners), 1e12);
             vm.expectRevert();
             kpassSigners.unstake();
             vm.expectRevert();
@@ -388,7 +388,7 @@ contract kpassSignersTest is Test {
             vm.stopPrank();
         }
 
-        assertApproxEqAbs(tcko.balanceOf(vm.addr(1)), 2e12, 5);
+        assertApproxEqAbs(kdao.balanceOf(vm.addr(1)), 2e12, 5);
     }
 
     function testUnstakeMultiple() external {
@@ -404,7 +404,7 @@ contract kpassSignersTest is Test {
         for (uint256 t = 1; t <= 5; ++t) {
             vm.prank(vm.addr(t));
             kpassSigners.unstake();
-            assertEq(tcko.balanceOf(vm.addr(t)), 0);
+            assertEq(kdao.balanceOf(vm.addr(t)), 0);
             assertEq(kpassSigners.balanceOf(vm.addr(t)), 1e12);
         }
 
@@ -413,7 +413,7 @@ contract kpassSignersTest is Test {
         for (uint256 t = 1; t <= 5; ++t) {
             vm.prank(vm.addr(t));
             kpassSigners.withdraw();
-            assertEq(tcko.balanceOf(vm.addr(t)), 1e12);
+            assertEq(kdao.balanceOf(vm.addr(t)), 1e12);
             assertEq(kpassSigners.balanceOf(vm.addr(t)), 0);
         }
     }
@@ -427,7 +427,7 @@ contract kpassSignersTest is Test {
             assertEq(SignerInfo.unwrap(kpassSigners.signerInfo(vm.addr(t))), 0);
             kpassSigners.approveSignerNode(vm.addr(t));
             assertEq(kpassSigners.depositBalanceOf(vm.addr(t)), kpassSigners.stakingDeposit());
-            assertEq(tcko.balanceOf(address(kpassSigners)), t * kpassSigners.stakingDeposit());
+            assertEq(kdao.balanceOf(address(kpassSigners)), t * kpassSigners.stakingDeposit());
             assertEq(
                 uint112(SignerInfo.unwrap(kpassSigners.signerInfo(vm.addr(t)))),
                 (kpassSigners.stakingDeposit() << 64) | block.timestamp
@@ -445,7 +445,7 @@ contract kpassSignersTest is Test {
             assertEq(SignerInfo.unwrap(kpassSigners.signerInfo(vm.addr(t))), 0);
             kpassSigners.approveSignerNode(vm.addr(t));
             assertEq(kpassSigners.depositBalanceOf(vm.addr(t)), kpassSigners.stakingDeposit());
-            assertEq(tcko.balanceOf(address(kpassSigners)), t * kpassSigners.stakingDeposit());
+            assertEq(kdao.balanceOf(address(kpassSigners)), t * kpassSigners.stakingDeposit());
         }
         vm.stopPrank();
 
@@ -483,11 +483,11 @@ contract kpassSignersTest is Test {
         assertEq(kpassSigners.balanceOf(vm.addr(3)), 0);
         assertEq(kpassSigners.balanceOf(vm.addr(4)), 0);
         assertEq(kpassSigners.balanceOf(vm.addr(5)), 25e11);
-        assertEq(tcko.balanceOf(vm.addr(1)), 0);
-        assertEq(tcko.balanceOf(vm.addr(2)), 125e10);
-        assertEq(tcko.balanceOf(vm.addr(3)), 125e10);
-        assertEq(tcko.balanceOf(vm.addr(4)), 0);
-        assertEq(tcko.balanceOf(vm.addr(5)), 0);
+        assertEq(kdao.balanceOf(vm.addr(1)), 0);
+        assertEq(kdao.balanceOf(vm.addr(2)), 125e10);
+        assertEq(kdao.balanceOf(vm.addr(3)), 125e10);
+        assertEq(kdao.balanceOf(vm.addr(4)), 0);
+        assertEq(kdao.balanceOf(vm.addr(5)), 0);
     }
 
     function testTotalBalancePreserved() external {
@@ -556,8 +556,8 @@ contract kpassSignersTest is Test {
         vm.warp(0);
         for (uint256 s = 1; s <= 19; ++s) {
             vm.startPrank(vm.addr(s));
-            tcko.mint(s * 1e12);
-            tcko.approve(address(kpassSigners), s * 1e12);
+            kdao.mint(s * 1e12);
+            kdao.approve(address(kpassSigners), s * 1e12);
             vm.stopPrank();
             vm.startPrank(VOTING);
             kpassSigners.setStakingDeposit(uint48(s * 1e12));
@@ -581,8 +581,8 @@ contract kpassSignersTest is Test {
         for (uint256 t = 20; t < 24; ++t) {
             vm.warp(t);
             vm.startPrank(vm.addr(t));
-            tcko.mint(20e12);
-            tcko.approve(address(kpassSigners), 20e12);
+            kdao.mint(20e12);
+            kdao.approve(address(kpassSigners), 20e12);
             vm.stopPrank();
             vm.prank(VOTING);
             kpassSigners.approveSignerNode(vm.addr(t));
@@ -612,8 +612,8 @@ contract kpassSignersTest is Test {
         vm.prank(vm.addr(21));
         kpassSigners.withdraw();
 
-        assertApproxEqAbs(tcko.balanceOf(vm.addr(21)), 20e12, 25);
-        assertApproxEqAbs(tcko.balanceOf(vm.addr(22)), 20e12 + uint256(400e12) / 41, 20);
+        assertApproxEqAbs(kdao.balanceOf(vm.addr(21)), 20e12, 25);
+        assertApproxEqAbs(kdao.balanceOf(vm.addr(22)), 20e12 + uint256(400e12) / 41, 20);
         assertApproxEqAbs(kpassSigners.balanceOf(vm.addr(1)), 210e12 + (21 * uint256(20e12)) / 41, 20);
     }
 }

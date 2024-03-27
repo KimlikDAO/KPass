@@ -14,20 +14,20 @@ import {KDAO_ADDR, KPASS_SIGNERS, VOTING} from "interfaces/Addresses.sol";
  *   O: Never been a signer before.
  *   S: Staked the required amount, and is an active signer.
  *   U: A signer started the unstake process, and is no longer a valid signer,
- *      but hasn't collected their staked TCKOs (plus excess) yet.
+ *      but hasn't collected their staked KDAOs (plus excess) yet.
  *   F: A former signer which the `KPASSSigners` contract does not owe any
- *      TCKOs to. A signer ends up in this state either by getting slashed
- *      or voluntarily unstaking and then collecting their TCKOs.
+ *      KDAOs to. A signer ends up in this state either by getting slashed
+ *      or voluntarily unstaking and then collecting their KDAOs.
  *
  * The valid state transitions are as follows:
  *
  *   State Method                  End state  Prerequisite
  *   --------------------------------------------------------------------------
- *   O ----`approveSignerNode(addr)`--> S     Approve `stakingDeposit` TCKOs
+ *   O ----`approveSignerNode(addr)`--> S     Approve `stakingDeposit` KDAOs
  *   S ----`unstake()`----------------> U
- *   S ----`slashSignerNode(addr)`----> F     Only by DAO vote (OYLAMA)
+ *   S ----`slashSignerNode(addr)`----> F     Only by protocol vote (VOTING)
  *   U ----`withdraw()`---------------> F     30 days after `unstake()`
- *   U ----`shashSignerNode(addr)`----> F     Only by DAO vote (OYLAMA)
+ *   U ----`shashSignerNode(addr)`----> F     Only by protocol vote (VOTING)
  *
  * @author KimlikDAO
  */
@@ -109,11 +109,11 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
     ///////////////////////////////////////////////////////////////////////////
 
     function name() external pure override returns (string memory) {
-        return "Staked TCKO";
+        return "Staked KDAO";
     }
 
     function symbol() external pure override returns (string memory) {
-        return "TCKO-st";
+        return "KDAO-st";
     }
 
     function decimals() external pure override returns (uint8) {
