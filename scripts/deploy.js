@@ -28,6 +28,7 @@ const ChainData = {
   "0x38": ["bsc-dataseed3.binance.org", "binance-coin", "BNB"],
   "0x406": ["evm.confluxrpc.com", "conflux-network", "CFX"],
   "0xfa": ["rpc.ankr.com/fantom", "fantom", "FTM"],
+  "0x144": ["mainnet.era.zksync.io", "ethereum", "ETH"]
 }
 
 /** @const {!Object<string, !Array<TokenInfo>>} */
@@ -164,7 +165,7 @@ const readSources = (sourceNames) => Object.fromEntries(
  */
 const computeDomainSeparator = (chainId, deployerAddress) =>
   ethers.TypedDataEncoder.hashDomain({
-    name: 'TCKT',
+    name: 'KPASS',
     version: '1',
     chainId,
     verifyingContract: ethers.getCreateAddress({
@@ -182,16 +183,16 @@ const computeDomainSeparator = (chainId, deployerAddress) =>
  */
 const processSources = (sources, chainId, deployerAddress) => {
   const domainSeparator = computeDomainSeparator(chainId, deployerAddress);
-  let file = sources["TCKT.sol"].content;
+  let file = sources["KPASS.sol"].content;
 
   if (!file.includes(DOMAIN_SEPARATOR)) {
-    console.error("TCKT.sol does not have the right DOMAIN_SEPARATOR");
+    console.error("KPASS.sol does not have the right DOMAIN_SEPARATOR");
     process.exit(1);
   }
   file = file.replace(DOMAIN_SEPARATOR, domainSeparator);
-  if (!chainId.startsWith("0xa86"))
-    file = file.slice(0, file.indexOf("// Exposure report") - 92) + "}";
-  sources["TCKT.sol"].content = file;
+  // if (!chainId.startsWith("0xa86"))
+  //   file = file.slice(0, file.indexOf("// Exposure report") - 92) + "}";
+  sources["KPASS.sol"].content = file;
   return sources;
 }
 
@@ -206,7 +207,7 @@ const compareAgainstFoundry = (bytecode, chainId, deployerAddress) => {
   console.log(`   👉 Old:        ${DOMAIN_SEPARATOR}`);
   console.log(`   👉 New:        ${domainSeparator}`);
 
-  const foundryBytecode = JSON.parse(readFileSync("out/TCKT.sol/TCKT.json"))
+  const foundryBytecode = JSON.parse(readFileSync("out/KPASS.sol/KPASS.json"))
     .bytecode.object.slice(2)
     .replaceAll(DOMAIN_SEPARATOR.slice(2), domainSeparator.slice(2));
   console.log(`   📏 Size:       ${foundryBytecode.length / 2}`);
@@ -238,7 +239,7 @@ const deployToChain = async (chainId, privKey) => {
   console.log(`📜 Contract:      ${deployedAddress}`);
   console.log(`🧮 Nonce:         ${nonce}, ${nonce == 0 ? "👍" : "👎"}`)
 
-  console.log(`🌀 Compiling...   TCKT for ${chainId} and address ${deployedAddress}`);
+  console.log(`🌀 Compiling...   KPASS for ${chainId} and address ${deployedAddress}`);
   const compilerInput = JSON.stringify({
     language: "Solidity",
     sources: processSources(readSources([
@@ -247,7 +248,7 @@ const deployToChain = async (chainId, privKey) => {
       "interfaces/IERC20.sol",
       "interfaces/IERC20Permit.sol",
       "interfaces/IERC721.sol",
-      "TCKT.sol",
+      "KPASS.sol",
     ]), chainId, wallet.address),
     settings: {
       optimizer: {
@@ -255,8 +256,8 @@ const deployToChain = async (chainId, privKey) => {
         runs: Foundry.optimizer_runs,
       },
       outputSelection: {
-        "TCKT.sol": {
-          "TCKT": ["abi", "evm.bytecode.object"]
+        "KPASS.sol": {
+          "KPASS": ["abi", "evm.bytecode.object"]
         }
       }
     },
@@ -268,12 +269,12 @@ const deployToChain = async (chainId, privKey) => {
   const output = solc.compile(compilerInput);
   /** @const {!Object} */
   const solcJson = JSON.parse(output);
-  const TCKT = solcJson.contracts["TCKT.sol"]["TCKT"];
+  const KPASS = solcJson.contracts["KPASS.sol"]["KPASS"];
 
-  console.log(`📏 Binary size:   ${TCKT.evm.bytecode.object.length / 2} bytes`);
+  console.log(`📏 Binary size:   ${KPASS.evm.bytecode.object.length / 2} bytes`);
   if (chainId.startsWith("0xa86")) {
     console.log(`🔺 Avalanche:     Comparing against foundry compiled binary`);
-    compareAgainstFoundry(TCKT.evm.bytecode.object, chainId, wallet.address);
+    compareAgainstFoundry(KPASS.evm.bytecode.object, chainId, wallet.address);
   }
 
   const feeData = await provider.getFeeData();
@@ -283,7 +284,7 @@ const deployToChain = async (chainId, privKey) => {
   if (feeData.maxPriorityFeePerGas)
     console.log(`🫙  Max priority:  ${feeData.maxPriorityFeePerGas / 1_000_000_000n}`);
 
-  const factory = new ethers.ContractFactory(TCKT.abi, TCKT.evm.bytecode.object, wallet);
+  const factory = new ethers.ContractFactory(KPASS.abi, KPASS.evm.bytecode.object, wallet);
   const deployTx = await factory.getDeployTransaction();
 
   /** @const {!bigint} */
@@ -297,11 +298,11 @@ const deployToChain = async (chainId, privKey) => {
 
   if (nonce != 0) return;
   console.log(feeData);
-  const contract = await factory.deploy({
+  /*const contract = await factory.deploy({
     maxFeePerGas: 37_000_000_000n,
     maxPriorityFeePerGas: 1_000_000_000n
-  });
+  });*/
   console.log(contract);
 }
 
-deployToChain("0xa86a", "0x32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33");
+deployToChain("0x144", "0x32ad0ed30e1257b02fc85fa90a8179241cc38d926a2a440d8f6fbfd53b905c33");

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.21;
+pragma solidity ^0.8.0;
 
 import "interfaces/IDIDSigners.sol";
 import {IERC20} from "interfaces/IERC20.sol";
-import {OYLAMA, TCKO_ADDR} from "interfaces/Addresses.sol";
+import {KDAO_ADDR, KPASS_SIGNERS, VOTING} from "interfaces/Addresses.sol";
 
 /**
- * The contract by which KimlikDAO (i.e., TCKO holders) manage signer nodes.
+ * The contract by which KimlikDAO (i.e., KDAO holders) manage signer nodes.
  *
  * An evm address may be in one of the 4 states:
  *
@@ -15,7 +15,7 @@ import {OYLAMA, TCKO_ADDR} from "interfaces/Addresses.sol";
  *   S: Staked the required amount, and is an active signer.
  *   U: A signer started the unstake process, and is no longer a valid signer,
  *      but hasn't collected their staked TCKOs (plus excess) yet.
- *   F: A former signer which the `TCKTSigners` contract does not owe any
+ *   F: A former signer which the `KPASSSigners` contract does not owe any
  *      TCKOs to. A signer ends up in this state either by getting slashed
  *      or voluntarily unstaking and then collecting their TCKOs.
  *
@@ -31,7 +31,7 @@ import {OYLAMA, TCKO_ADDR} from "interfaces/Addresses.sol";
  *
  * @author KimlikDAO
  */
-contract TCKTSigners is IDIDSigners, IERC20 {
+contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
     event SignerNodeJoin(address indexed signer, uint256 timestamp);
     event SignerNodeLeave(address indexed signer, uint256 timestamp);
     event SignerNodeSlash(address indexed signer, uint256 slashedAmount);
@@ -68,7 +68,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * minimizes rounding errors, especially for numbers with prime factors
      * 2, 5, 3, 7, which we care about the most.
      */
-    uint256 constant CUM_RATE_MULTIPLIER = (10**15) * (3**10) * (7**5);
+    uint256 constant CUM_RATE_MULTIPLIER = (10 ** 15) * (3 ** 10) * (7 ** 5);
 
     /**
      * Maps a jointDeposit event number to a bitpacked struct.
@@ -95,7 +95,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     /**
      * Maps and evm address to the signerInfo struct. See `IDIDSigners`.
      */
-    mapping(address => uint256) public override signerInfo;
+    mapping(address => SignerInfo) public override signerInfo;
 
     /**
      * Sum of initial deposits of active signers.
@@ -121,7 +121,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
     }
 
     function totalSupply() external view override returns (uint256) {
-        return IERC20(TCKO_ADDR).balanceOf(address(this));
+        return IERC20(KDAO_ADDR).balanceOf(address(this));
     }
 
     /**
@@ -136,7 +136,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * @return The amount of TCKO-st tokens the address has.
      */
     function balanceOf(address addr) public view returns (uint256) {
-        uint256 info = signerInfo[addr];
+        uint256 info = SignerInfo.unwrap(signerInfo[addr]);
         unchecked {
             if (info == 0) return 0;
             if (info & END_TS_MASK != 0) return uint48(info >> WITHDRAW_OFFSET);
@@ -144,20 +144,15 @@ contract TCKTSigners is IDIDSigners, IERC20 {
             uint256 n = jointDepositCount;
             uint256 r = n;
 
-            for (uint256 l = 0; l < r; ) {
+            for (uint256 l = 0; l < r;) {
                 uint256 m = r - ((r - l) >> 1);
                 if (uint64(jointDeposits[m]) > startTs) r = m - 1;
                 else l = m;
             }
             // Here we are using the fact that
             //   n > r => jointDeposits[n].timestamp > jointDeposits[r].timestamp
-            uint256 cumulativeRate = r == 0
-                ? jointDeposits[n]
-                : jointDeposits[n] - jointDeposits[r];
-            return
-                (uint48(info >> 64) *
-                    (CUM_RATE_MULTIPLIER + (cumulativeRate >> 64))) /
-                CUM_RATE_MULTIPLIER;
+            uint256 cumulativeRate = r == 0 ? jointDeposits[n] : jointDeposits[n] - jointDeposits[r];
+            return (uint48(info >> 64) * (CUM_RATE_MULTIPLIER + (cumulativeRate >> 64))) / CUM_RATE_MULTIPLIER;
         }
     }
 
@@ -171,27 +166,18 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * @return The amount of TCKOs the signer deposited.
      */
     function depositBalanceOf(address addr) external view returns (uint256) {
-        return uint48(signerInfo[addr] >> 64);
+        return uint48(SignerInfo.unwrap(signerInfo[addr]) >> 64);
     }
 
     function transfer(address, uint256) external pure override returns (bool) {
         return false;
     }
 
-    function transferFrom(
-        address,
-        address,
-        uint256
-    ) external pure override returns (bool) {
+    function transferFrom(address, address, uint256) external pure override returns (bool) {
         return false;
     }
 
-    function allowance(address, address)
-        external
-        pure
-        override
-        returns (uint256)
-    {
+    function allowance(address, address) external pure override returns (uint256) {
         return 0;
     }
 
@@ -204,19 +190,17 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * TCKO stake.
      *
      * The sender must have approved this amount of TCKOs for use by the
-     * TCKTSigners contract beforehand.
+     * KPASSSigners contract beforehand.
      *
      * @param amount The amount to deposit to signers
      */
     function jointDeposit(uint256 amount) external {
-        IERC20(TCKO_ADDR).transferFrom(msg.sender, address(this), amount);
+        IERC20(KDAO_ADDR).transferFrom(msg.sender, address(this), amount);
         unchecked {
             uint256 n = jointDepositCount;
             uint256 cumRate = jointDeposits[n] >> 64;
             jointDeposits[n + 1] =
-                ((((CUM_RATE_MULTIPLIER * amount) / signerDepositBalance) +
-                    cumRate) << 64) |
-                block.timestamp;
+                ((((CUM_RATE_MULTIPLIER * amount) / signerDepositBalance) + cumRate) << 64) | block.timestamp;
             jointDepositCount = n + 1;
         }
     }
@@ -238,7 +222,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * @param stakeAmount the amount required to be a signer node.
      */
     function setStakingDeposit(uint48 stakeAmount) external {
-        require(msg.sender == OYLAMA);
+        require(msg.sender == VOTING);
         stakingDeposit = stakeAmount;
         emit StakingDepositChange(stakeAmount);
     }
@@ -252,7 +236,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * @param signerCount the amount of valid signatures needed.
      */
     function setSignerCountNeeded(uint256 signerCount) external {
-        require(msg.sender == OYLAMA);
+        require(msg.sender == VOTING);
         signerCountNeeded = signerCount;
         emit SignerCountNeededChange(signerCount);
     }
@@ -266,7 +250,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * @param signerStake the amount of valid signer stake needed.
      */
     function setSignerStakeNeeded(uint256 signerStake) external {
-        require(msg.sender == OYLAMA);
+        require(msg.sender == VOTING);
         signerStakeNeeded = signerStake;
         emit SignerStakeNeededChange(signerStake);
     }
@@ -287,17 +271,15 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      * @param addr Address of a node to be added to validator list.
      */
     function approveSignerNode(address addr) external {
-        require(msg.sender == OYLAMA);
+        require(msg.sender == VOTING);
         // Ensure that `state(addr) == O`.
-        require(signerInfo[addr] == 0);
+        require(SignerInfo.unwrap(signerInfo[addr]) == 0);
         uint256 stakeAmount = stakingDeposit;
-        IERC20(TCKO_ADDR).transferFrom(addr, address(this), stakeAmount);
+        IERC20(KDAO_ADDR).transferFrom(addr, address(this), stakeAmount);
         unchecked {
-            uint256 color = uint256(
-                keccak256(abi.encode(addr, block.timestamp))
-            ) << 224;
+            uint256 color = uint256(keccak256(abi.encode(addr, block.timestamp))) << 224;
             signerDepositBalance += stakeAmount;
-            signerInfo[addr] = color | (stakeAmount << 64) | block.timestamp;
+            signerInfo[addr] = SignerInfo.wrap(color | (stakeAmount << 64) | block.timestamp);
         }
         emit SignerNodeJoin(addr, block.timestamp);
         emit Transfer(address(this), addr, stakeAmount);
@@ -314,7 +296,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      *
      */
     function unstake() external {
-        uint256 info = signerInfo[msg.sender];
+        uint256 info = SignerInfo.unwrap(signerInfo[msg.sender]);
         // Ensure that `state(msg.sender) == S`.
         require(info != 0 && (info & END_TS_MASK == 0));
         unchecked {
@@ -322,9 +304,7 @@ contract TCKTSigners is IDIDSigners, IERC20 {
             uint256 deposited = uint48(info >> 64);
             signerDepositBalance -= deposited;
             signerInfo[msg.sender] =
-                (toWithdraw << WITHDRAW_OFFSET) |
-                (block.timestamp << END_TS_OFFSET) |
-                info;
+                SignerInfo.wrap((toWithdraw << WITHDRAW_OFFSET) | (block.timestamp << END_TS_OFFSET) | info);
         }
         emit SignerNodeLeave(msg.sender, block.timestamp);
     }
@@ -337,15 +317,15 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      *
      */
     function withdraw() external {
-        uint256 info = signerInfo[msg.sender];
+        uint256 info = SignerInfo.unwrap(signerInfo[msg.sender]);
         unchecked {
             uint256 endTs = uint64(info >> END_TS_OFFSET);
             uint256 toWithdraw = uint48(info >> WITHDRAW_OFFSET);
             // Ensure `state(msg.sender) == U`
             require(toWithdraw != 0 && endTs != 0);
             require(block.timestamp > endTs + 30 days);
-            signerInfo[msg.sender] = info & ~WITHDRAW_MASK;
-            IERC20(TCKO_ADDR).transfer(msg.sender, toWithdraw);
+            signerInfo[msg.sender] = SignerInfo.wrap(info & ~WITHDRAW_MASK);
+            IERC20(KDAO_ADDR).transfer(msg.sender, toWithdraw);
             emit Transfer(msg.sender, address(this), toWithdraw);
         }
     }
@@ -360,31 +340,169 @@ contract TCKTSigners is IDIDSigners, IERC20 {
      *                         a validator.
      */
     function slashSignerNode(address addr) external {
-        require(msg.sender == OYLAMA);
-        uint256 info = signerInfo[addr];
+        require(msg.sender == VOTING);
+        uint256 info = SignerInfo.unwrap(signerInfo[addr]);
         unchecked {
             uint256 slashAmount = balanceOf(addr);
             uint256 signerBalanceLeft = signerDepositBalance;
             // The case `state(addr) == S`
             if (info != 0 && info & END_TS_MASK == 0) {
-                signerInfo[addr] = (block.timestamp << END_TS_OFFSET) | info;
+                signerInfo[addr] = SignerInfo.wrap((block.timestamp << END_TS_OFFSET) | info);
                 signerBalanceLeft -= uint48(info >> 64);
                 signerDepositBalance = signerBalanceLeft;
             } else {
                 // The case `state(addr) == U`
-                signerInfo[addr] = info & ~WITHDRAW_MASK; // Zero-out toWithdraw
+                signerInfo[addr] = SignerInfo.wrap(info & ~WITHDRAW_MASK); // Zero-out toWithdraw
             }
             uint256 n = jointDepositCount;
             uint256 cumRate = jointDeposits[n] >> 64;
             jointDeposits[n + 1] =
-                ((((CUM_RATE_MULTIPLIER * slashAmount) / signerBalanceLeft) +
-                    cumRate) << 64) |
-                block.timestamp;
+                ((((CUM_RATE_MULTIPLIER * slashAmount) / signerBalanceLeft) + cumRate) << 64) | block.timestamp;
             jointDepositCount = n + 1;
 
             emit SignerNodeSlash(addr, slashAmount);
             emit SignerNodeLeave(addr, block.timestamp);
             emit Transfer(addr, address(this), slashAmount);
         }
+    }
+
+    function authenticateExposureReportID3Sigs(
+        bytes32 exposureReportID,
+        uint128x2 stakeThresholdAndSignatureTs,
+        Signature[3] calldata sigs
+    ) external view override {
+        uint256 signatureTs = uint128(uint128x2.unwrap(stakeThresholdAndSignatureTs));
+        bytes32 digest = keccak256(abi.encode(uint256(bytes32("\x19KimlikDAO hash\n")) | signatureTs, exposureReportID));
+        uint256 stake = 0;
+        address[3] memory signer;
+        for (uint256 i = 0; i < 3; ++i) {
+            signer[i] = ecrecover(
+                digest,
+                uint8(sigs[i].yParityAndS >> 255) + 27,
+                sigs[i].r,
+                bytes32(sigs[i].yParityAndS & ((1 << 255) - 1))
+            );
+            uint256 info = SignerInfo.unwrap(signerInfo[signer[i]]);
+            uint256 endTs = uint64(info >> END_TS_OFFSET);
+            stake += uint64(info >> DEPOSIT_OFFSET);
+            require(info != 0 && uint64(info) <= signatureTs && (endTs == 0 || signatureTs < endTs));
+        }
+        uint256 stakeThreshold = uint128x2.unwrap(stakeThresholdAndSignatureTs) >> 128;
+        require(stakeThreshold == 0 || stake <= stakeThreshold);
+        require(signer[0] != signer[1] && signer[0] != signer[2] && signer[1] != signer[2]);
+    }
+
+    function authenticateHumanID3Sigs(
+        bytes32 humanID,
+        uint128x2 stakeThresholdAndSignatureTs,
+        bytes32 commitmentR,
+        Signature[3] calldata sigs
+    ) external view override {
+        uint256 signatureTs = uint128(uint128x2.unwrap(stakeThresholdAndSignatureTs));
+        bytes32 digest = keccak256(
+            abi.encode(
+                uint256(bytes32("\x19KimlikDAO hash\n")) | signatureTs,
+                keccak256(abi.encodePacked(commitmentR, msg.sender)),
+                humanID
+            )
+        );
+        uint256 stake = 0;
+        address[3] memory signer;
+        for (uint256 i = 0; i < 3; ++i) {
+            signer[i] = ecrecover(
+                digest,
+                uint8(sigs[i].yParityAndS >> 255) + 27,
+                sigs[i].r,
+                bytes32(sigs[i].yParityAndS & ((1 << 255) - 1))
+            );
+            uint256 info = SignerInfo.unwrap(signerInfo[signer[i]]);
+            uint256 endTs = uint64(info >> END_TS_OFFSET);
+            stake += uint64(info >> DEPOSIT_OFFSET);
+            require(info != 0 && uint64(info) <= signatureTs && (endTs == 0 || signatureTs < endTs));
+        }
+        uint256 stakeThreshold = uint128x2.unwrap(stakeThresholdAndSignatureTs) >> 128;
+        require(stakeThreshold == 0 || stake <= stakeThreshold);
+        require(signer[0] != signer[1] && signer[0] != signer[2] && signer[1] != signer[2]);
+    }
+
+    function authenticateHumanID5Sigs(
+        bytes32 humanID,
+        uint128x2 stakeThresholdAndSignatureTs,
+        bytes32 commitmentR,
+        Signature[5] calldata sigs
+    ) external view override {
+        uint256 signatureTs = uint128(uint128x2.unwrap(stakeThresholdAndSignatureTs));
+        bytes32 digest = keccak256(
+            abi.encode(
+                uint256(bytes32("\x19KimlikDAO hash\n")) | signatureTs,
+                keccak256(abi.encodePacked(commitmentR, msg.sender)),
+                humanID
+            )
+        );
+        uint256 stake = 0;
+        address[5] memory signer;
+        for (uint256 i = 0; i < 5; ++i) {
+            signer[i] = ecrecover(
+                digest,
+                uint8(sigs[i].yParityAndS >> 255) + 27,
+                sigs[i].r,
+                bytes32(sigs[i].yParityAndS & ((1 << 255) - 1))
+            );
+            uint256 info = SignerInfo.unwrap(signerInfo[signer[i]]);
+            uint256 endTs = uint64(info >> END_TS_OFFSET);
+            stake += uint64(info >> DEPOSIT_OFFSET);
+            require(info != 0 && uint64(info) <= signatureTs && (endTs == 0 || signatureTs < endTs));
+        }
+        uint256 stakeThreshold = uint128x2.unwrap(stakeThresholdAndSignatureTs) >> 128;
+        require(stakeThreshold == 0 || stake <= stakeThreshold);
+        require(
+            signer[0] != signer[1] && signer[0] != signer[2] && signer[0] != signer[3] && signer[0] != signer[4]
+                && signer[1] != signer[2] && signer[1] != signer[3] && signer[1] != signer[4] && signer[2] != signer[3]
+                && signer[2] != signer[4] && signer[3] != signer[4]
+        );
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // Exposure report related fields and methods
+    //
+    ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * @notice When a KPASS holder gets their wallet private key exposed
+     * they can either revoke their KPASS themselves, or use social revoking.
+     *
+     * If they are unable to do either, they need to obtain a new KPASS (to a
+     * new address), with which they can file an exposure report via the
+     * `reportExposure()` method. Doing so invalidates all KPASSs across all
+     * chains and all addresses they have obtained before the timestamp of this
+     * newly obtained KPASS.
+     */
+    event ExposureReport(bytes32 indexed exposureReportID, uint256 timestamp);
+
+    /**
+     * Maps a `exposureReportID` to a reported exposure timestamp, or zero if
+     * no exposure has been reported.
+     */
+    mapping(bytes32 => uint256) public exposureReported;
+
+    /**
+     * Adds an `exposureReportID` to the exposed list.
+     *
+     * A nonce is not needed since the `exposureReported[exposureReportID]`
+     * value can only be incremented.
+     *
+     * @param exposureReportID of the person whose wallet keys were exposed.
+     * @param signatureTs      of the exposureReportID signatures.
+     * @param signatures       Signer node signatures for the exposureReportID.
+     */
+    function reportExposure(bytes32 exposureReportID, uint256 signatureTs, Signature[3] calldata signatures) external {
+        IDIDSigners(KPASS_SIGNERS).authenticateExposureReportID3Sigs(
+            exposureReportID, uint128x2.wrap(signatureTs), signatures
+        );
+        // Exposure report timestamp can only be incremented.
+        require(exposureReported[exposureReportID] < signatureTs);
+        exposureReported[exposureReportID] = signatureTs;
+        emit ExposureReport(exposureReportID, signatureTs);
     }
 }
