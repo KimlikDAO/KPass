@@ -4,8 +4,6 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 import "interfaces/Addresses.sol";
-import "interfaces/IERC20Permit.sol";
-import "interfaces/testing/MockTokens.sol";
 import {KimlikDAOPass} from "contracts/KimlikDAOPass.sol";
 
 contract KimlikDAOPassGasTest is Test {
