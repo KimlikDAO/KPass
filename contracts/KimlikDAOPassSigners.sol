@@ -40,13 +40,13 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
     event SignerStakeNeededChange(uint256 signerStake);
 
     /**
-     * The amount of TCKOs a node must stake before they can be voted as a
+     * The amount of KDAOs a node must stake before they can be voted as a
      * signer node. Note approving this amount for staking is a necessary first
      * step to be a signer, but not nearly sufficient. The signer node operator
      * is vetted by the DAO and voted for approval.
      *
-     * The initial value is 25K TCKOs and the value is determined by DAO vote
-     * thereafter via the `setStakingDeposit()` method.
+     * The initial value is 25K KDAOs and the value is determined by the `VOTING`
+     * contract thereafter via the `setStakingDeposit()` method.
      */
     uint256 public stakingDeposit = 25_000e6;
 
@@ -207,14 +207,14 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
 
     ///////////////////////////////////////////////////////////////////////////
     //
-    // Parameters to be adjusted by the DAO vote.
+    // Parameters to be adjusted by the `VOTING` contract
     //
     ///////////////////////////////////////////////////////////////////////////
 
     /**
      * Sets the TCKO amount required to qualify for the signer selection.
      *
-     * Can only be set by the DAO vote, that is, the `OYLAMA` contract.
+     * Can only be set by the `VOTING` contract.
      *
      * Note the existing signers are not affected by a stakingDeposit change;
      * only new signers are subjected to the new staking amount.
@@ -231,7 +231,7 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
      * Sets the number of valid signatures needed before a `did.Section` is
      * deemed valid by the validators.
      *
-     * Can only be set by the DAO vote, that is, the `OYLAMA` contract.
+     * Can only be set by the `VOTING` contract.
      *
      * @param signerCount the amount of valid signatures needed.
      */
@@ -245,7 +245,7 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
      * Sets the amount of valid signer stake needed before a `did.Section` is
      * deemed valid by the validators.
      *
-     * Can only be set by the DAO vote, that is, the `OYLAMA` contract.
+     * Can only be set by the `VOTING` contract.
      *
      * @param signerStake the amount of valid signer stake needed.
      */
@@ -333,8 +333,8 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
     /**
      * Bans a validator as of the current block time.
      *
-     *   S ----`slashSignerNode(addr)`----> F     Only by DAO vote (OYLAMA)
-     *   U ----`shashSignerNode(addr)`----> F     Only by DAO vote (OYLAMA)
+     *   S ----`slashSignerNode(addr)`----> F     Only by `VOTING` contract.
+     *   U ----`shashSignerNode(addr)`----> F     Only by `VOTING` contract.
      *
      * @param addr             Address of the node to be banned from being
      *                         a validator.

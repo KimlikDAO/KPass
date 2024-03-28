@@ -46,7 +46,8 @@ import {IERC721} from "interfaces/IERC721.sol";
  * can inform the nominated revokers and request them to cast a revoke vote.
  *
  * To encourage setting up social revoke, a discount of 33% is offered
- * initially, and the discount rate is determined by the DAO vote thereafter.
+ * initially, and the discount rate is determined by the KDAO holder vote
+ * thereafter.
  * The discount rate is set through the `updatePricesBulk()` method, which can
  * only be called by `VOTING`, the KimlikDAO voting contract.
  * (https://github.com/KimlikDAO/Voting)
@@ -176,10 +177,10 @@ contract KimlikDAOPass is IERC721 {
 
     /**
      * Transfers the entire native token balance of this contract to
-     * `DAO_KASASI`.
+     * `PROTOCOL_FUND`.
      *
      * @dev To optimize the KPASS creation gas fees, we do not forward fees
-     * collected in the networks native token to `DAO_KASASI` in each KPASS
+     * collected in the networks native token to `PROTOCOL_FUND` in each KPASS
      * creation.
      *
      * Instead, the fees are accumulated in this contract until the following
@@ -187,7 +188,7 @@ contract KimlikDAOPass is IERC721 {
      * by anyone. Further, KimlikDAO does weekly sweeps, again using this
      * method and covering the gas fee.
      *
-     * @dev `DAO_KASASI` has an empty `receive()` method therefore the
+     * @dev `PROTOCOL_FUND` has an empty `receive()` method therefore the
      * `transfer()` below should have enough gas to complete.
      */
     function sweepNativeToken() external {
@@ -195,7 +196,7 @@ contract KimlikDAOPass is IERC721 {
     }
 
     /**
-     * Moves ERC-20 tokens sent to this address by accident to `DAO_KASASI`.
+     * Moves ERC-20 tokens sent to this address by accident to `PROTOCOL_FUND`.
      */
     function sweepToken(IERC20 token) external {
         token.transfer(PROTOCOL_FUND, token.balanceOf(address(this)));
@@ -222,8 +223,8 @@ contract KimlikDAOPass is IERC721 {
     /**
      * Creates a new KPASS collecting the fee in the provided `token`.
      *
-     * This method works only with DAO approved tokens: the token must have
-     * been approved and set a nonzero price by the DAO vote beforehand.
+     * This method works only with protocol approved tokens: the token must have
+     * been approved and set a nonzero price by the KDAO holder vote beforehand.
      *
      * @param handle           IPFS handle of the persisted KPASS.
      * @param token            Contract address of an ERC-20 token.
@@ -246,7 +247,7 @@ contract KimlikDAOPass is IERC721 {
      * Note if a price change occurs between the moment the user signs off the
      * payment and this method is called, the method call will fail as the
      * signature will be invalid. However, the price changes happen at most
-     * once a week and off peak hours by the DAO vote.
+     * once a week and off peak hours by the KDAO holder vote.
      *
      * See https://eips.ethereum.org/EIPS/eip-2612 for more information on the
      * ERC-20 permit extension.
@@ -350,7 +351,7 @@ contract KimlikDAOPass is IERC721 {
      * `createSig` and the token payment with the `paymentSig`.
      *
      * The gas fee is paid by the transaction sender, which can be either
-     * `OYLAMA` or `KPASS_DEPLOYER`. We restrict the method to these two
+     * `VOTING` or `KPASS_DEPLOYER`. We restrict the method to these two
      * addresses since the intent of a signature request is not as clear as
      * that of a transaction and therefore a user may be tricked into creating
      * a KPASS with incorrect and invalid contents. Note this restriction is not
@@ -619,7 +620,7 @@ contract KimlikDAOPass is IERC721 {
 
     /**
      * The multiplicative premium for getting a KPASS wihout setting up social
-     * revoke. The initial value is 3/2, and adjusted by the DAO vote
+     * revoke. The initial value is 3/2, and adjusted by the KDAO holder vote.
      * thereafter.
      */
     uint256 private revokerlessPremium = (3 << 128) | uint256(2);
