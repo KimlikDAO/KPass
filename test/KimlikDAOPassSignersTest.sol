@@ -8,7 +8,7 @@ import {MockERC20Permit} from "interfaces/testing/MockTokens.sol";
 import {SignerInfo} from "interfaces/IDIDSigners.sol";
 import {KDAO_DEPLOYER, KPASS_SIGNERS_DEPLOYER, VOTING} from "interfaces/Addresses.sol";
 
-contract kpassSignersTest is Test {
+contract KimlikDAOPassSignersTest is Test {
     MockERC20Permit private kdao;
     KimlikDAOPassSigners private kpassSigners;
 

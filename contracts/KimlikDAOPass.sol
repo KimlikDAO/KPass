@@ -216,7 +216,7 @@ contract KimlikDAOPass is IERC721 {
         require(msg.value >= uint128(priceIn[address(0)]));
         handleOf[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
-        setRevokers(revokers);
+        _setRevokers(revokers);
     }
 
     /**
@@ -290,7 +290,7 @@ contract KimlikDAOPass is IERC721 {
         token.transferFrom(msg.sender, PROTOCOL_FUND, price);
         handleOf[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
-        setRevokers(revokers);
+        _setRevokers(revokers);
     }
 
     /**
@@ -324,7 +324,7 @@ contract KimlikDAOPass is IERC721 {
         token.transferFrom(msg.sender, PROTOCOL_FUND, price);
         handleOf[msg.sender] = handle;
         emit Transfer(address(this), msg.sender, handle);
-        setRevokers(revokers);
+        _setRevokers(revokers);
     }
 
     // keccak256(
@@ -448,7 +448,8 @@ contract KimlikDAOPass is IERC721 {
         return uint64(revokeInfo[addr]);
     }
 
-    function setRevokers(uint256[5] calldata revokers) internal {
+    function _setRevokers(uint256[5] calldata revokers) internal {
+        require(revokers[0] & REVOKES_REMAINING_MASK != 0);
         revokeInfo[msg.sender] = (revokeInfo[msg.sender] & type(uint64).max) | (revokers[0] & REVOKES_REMAINING_MASK);
 
         address rev0Addr = address(uint160(revokers[0]));
@@ -564,6 +565,16 @@ contract KimlikDAOPass is IERC721 {
     }
 
     /**
+     * Sets the revokers only if the revokesRemaining is zero.
+     *
+     * @param revokers List of revokers with weight and a threshold.
+     */
+    function setRevokers(uint256[5] calldata revokers) external {
+        require(revokeInfo[msg.sender] & REVOKES_REMAINING_MASK == 0);
+        _setRevokers(revokers);
+    }
+
+    /**
      * Adds a revoker or increase a revokers weight.
      *
      * @param deltaAndRevoker  Address who is given the revoke vote permission
@@ -596,12 +607,6 @@ contract KimlikDAOPass is IERC721 {
         unchecked {
             revokeInfo[msg.sender] = (threshold - reduce) << 192;
         }
-    }
-
-    function setRevokeThreshold(uint256 threshold) external {
-        uint256 info = revokeInfo[msg.sender];
-        require(info >> 192 == 0);
-        revokeInfo[msg.sender] = threshold << 192 | info;
     }
 
     ///////////////////////////////////////////////////////////////////////////

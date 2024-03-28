@@ -10,7 +10,7 @@ import {IERC165} from "interfaces/IERC165.sol";
 import {IERC20Permit} from "interfaces/IERC20Permit.sol";
 import {KimlikDAOPass, Signature} from "contracts/KimlikDAOPass.sol";
 
-contract KPASSTest is Test {
+contract KimlikDAOPassTest is Test {
     KimlikDAOPass private kpass;
 
     function setUp() public {
@@ -19,7 +19,7 @@ contract KPASSTest is Test {
         assertEq(address(kpass), KPASS_ADDR);
     }
 
-    function testTokenURI0() public view {
+    function testTokenURI() public view {
         assertEq(
             kpass.tokenURI(0x3d5bad4604650569f28733f7ad6ec22835e775a0eb20bfd809d78ed2ae8abe47),
             "https://ipfs.kimlikdao.org/ipfs/QmSUAf9gusxTbZZn5nC7d44kHjfrDeu2gfSY31MRVET28n"
