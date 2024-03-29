@@ -2,9 +2,19 @@
 
 pragma solidity ^0.8.0;
 
-import "interfaces/IDIDSigners.sol";
-import {IERC20} from "interfaces/IERC20.sol";
 import {KDAO_ADDR, KPASS_SIGNERS, VOTING} from "interfaces/Addresses.sol";
+import {
+    IDIDSigners,
+    SIGNER_INFO_DEPOSIT_OFFSET,
+    SIGNER_INFO_END_TS_MASK,
+    SIGNER_INFO_END_TS_OFFSET,
+    SIGNER_INFO_WITHDRAW_MASK,
+    SIGNER_INFO_WITHDRAW_OFFSET,
+    Signature,
+    SignerInfo,
+    uint128x2
+} from "interfaces/IDIDSigners.sol";
+import {IERC20} from "interfaces/IERC20.sol";
 
 /**
  * The contract by which KimlikDAO (i.e., KDAO holders) manage signer nodes.
@@ -139,7 +149,7 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
         uint256 info = SignerInfo.unwrap(signerInfo[addr]);
         unchecked {
             if (info == 0) return 0;
-            if (info & END_TS_MASK != 0) return uint48(info >> WITHDRAW_OFFSET);
+            if (info & SIGNER_INFO_END_TS_MASK != 0) return uint48(info >> SIGNER_INFO_WITHDRAW_OFFSET);
             uint256 startTs = uint64(info);
             uint256 n = jointDepositCount;
             uint256 r = n;
@@ -298,13 +308,14 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
     function unstake() external {
         uint256 info = SignerInfo.unwrap(signerInfo[msg.sender]);
         // Ensure that `state(msg.sender) == S`.
-        require(info != 0 && (info & END_TS_MASK == 0));
+        require(info != 0 && (info & SIGNER_INFO_END_TS_MASK == 0));
         unchecked {
             uint256 toWithdraw = balanceOf(msg.sender);
             uint256 deposited = uint48(info >> 64);
             signerDepositBalance -= deposited;
-            signerInfo[msg.sender] =
-                SignerInfo.wrap((toWithdraw << WITHDRAW_OFFSET) | (block.timestamp << END_TS_OFFSET) | info);
+            signerInfo[msg.sender] = SignerInfo.wrap(
+                (toWithdraw << SIGNER_INFO_WITHDRAW_OFFSET) | (block.timestamp << SIGNER_INFO_END_TS_OFFSET) | info
+            );
         }
         emit SignerNodeLeave(msg.sender, block.timestamp);
     }
@@ -319,12 +330,12 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
     function withdraw() external {
         uint256 info = SignerInfo.unwrap(signerInfo[msg.sender]);
         unchecked {
-            uint256 endTs = uint64(info >> END_TS_OFFSET);
-            uint256 toWithdraw = uint48(info >> WITHDRAW_OFFSET);
+            uint256 endTs = uint64(info >> SIGNER_INFO_END_TS_OFFSET);
+            uint256 toWithdraw = uint48(info >> SIGNER_INFO_WITHDRAW_OFFSET);
             // Ensure `state(msg.sender) == U`
             require(toWithdraw != 0 && endTs != 0);
             require(block.timestamp > endTs + 30 days);
-            signerInfo[msg.sender] = SignerInfo.wrap(info & ~WITHDRAW_MASK);
+            signerInfo[msg.sender] = SignerInfo.wrap(info & ~SIGNER_INFO_WITHDRAW_MASK);
             IERC20(KDAO_ADDR).transfer(msg.sender, toWithdraw);
             emit Transfer(msg.sender, address(this), toWithdraw);
         }
@@ -346,13 +357,13 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
             uint256 slashAmount = balanceOf(addr);
             uint256 signerBalanceLeft = signerDepositBalance;
             // The case `state(addr) == S`
-            if (info != 0 && info & END_TS_MASK == 0) {
-                signerInfo[addr] = SignerInfo.wrap((block.timestamp << END_TS_OFFSET) | info);
+            if (info != 0 && info & SIGNER_INFO_END_TS_MASK == 0) {
+                signerInfo[addr] = SignerInfo.wrap((block.timestamp << SIGNER_INFO_END_TS_OFFSET) | info);
                 signerBalanceLeft -= uint48(info >> 64);
                 signerDepositBalance = signerBalanceLeft;
             } else {
                 // The case `state(addr) == U`
-                signerInfo[addr] = SignerInfo.wrap(info & ~WITHDRAW_MASK); // Zero-out toWithdraw
+                signerInfo[addr] = SignerInfo.wrap(info & ~SIGNER_INFO_WITHDRAW_MASK); // Zero-out toWithdraw
             }
             uint256 n = jointDepositCount;
             uint256 cumRate = jointDeposits[n] >> 64;
@@ -383,8 +394,8 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
                 bytes32(sigs[i].yParityAndS & ((1 << 255) - 1))
             );
             uint256 info = SignerInfo.unwrap(signerInfo[signer[i]]);
-            uint256 endTs = uint64(info >> END_TS_OFFSET);
-            stake += uint64(info >> DEPOSIT_OFFSET);
+            uint256 endTs = uint64(info >> SIGNER_INFO_END_TS_OFFSET);
+            stake += uint64(info >> SIGNER_INFO_DEPOSIT_OFFSET);
             require(info != 0 && uint64(info) <= signatureTs && (endTs == 0 || signatureTs < endTs));
         }
         uint256 stakeThreshold = uint128x2.unwrap(stakeThresholdAndSignatureTs) >> 128;
@@ -416,8 +427,8 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
                 bytes32(sigs[i].yParityAndS & ((1 << 255) - 1))
             );
             uint256 info = SignerInfo.unwrap(signerInfo[signer[i]]);
-            uint256 endTs = uint64(info >> END_TS_OFFSET);
-            stake += uint64(info >> DEPOSIT_OFFSET);
+            uint256 endTs = uint64(info >> SIGNER_INFO_END_TS_OFFSET);
+            stake += uint64(info >> SIGNER_INFO_DEPOSIT_OFFSET);
             require(info != 0 && uint64(info) <= signatureTs && (endTs == 0 || signatureTs < endTs));
         }
         uint256 stakeThreshold = uint128x2.unwrap(stakeThresholdAndSignatureTs) >> 128;
@@ -449,8 +460,8 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
                 bytes32(sigs[i].yParityAndS & ((1 << 255) - 1))
             );
             uint256 info = SignerInfo.unwrap(signerInfo[signer[i]]);
-            uint256 endTs = uint64(info >> END_TS_OFFSET);
-            stake += uint64(info >> DEPOSIT_OFFSET);
+            uint256 endTs = uint64(info >> SIGNER_INFO_END_TS_OFFSET);
+            stake += uint64(info >> SIGNER_INFO_DEPOSIT_OFFSET);
             require(info != 0 && uint64(info) <= signatureTs && (endTs == 0 || signatureTs < endTs));
         }
         uint256 stakeThreshold = uint128x2.unwrap(stakeThresholdAndSignatureTs) >> 128;

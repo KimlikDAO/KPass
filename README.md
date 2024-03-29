@@ -1,13 +1,13 @@
-## KPASS: KimlikDAO DID Token
+## KPASS: KimlikDAO Pass
 
 <img align="right" width="300" height="300" src="https://kimlikdao.org/TCKT.svg">
 KPASS is a decentralized identifier (DID) NFT which can be minted by
 interacting with the KimlikDAO protocol. To interact with the protocol,
-one can use the reference dApp deployed at https://kimlikdao.org or run it
-locally by cloning the repo https://github.com/KimlikDAO/dapp and following
-the instructions therein.
+one can use the reference dApp deployed at https://kimlikdao.org or run the
+dApp locally by cloning the repo https://github.com/KimlikDAO/dapp and
+following the instructions therein.
 
-The contents of each KPASS is cryptographically committed to a single EVM
+The contents of each KPASS is cryptographically committed to a single wallet
 address, making it unusable from any other address.
 KPASS implements most of the ERC-721 NFT interface excluding, notably, the
 transfer-related methods, since KPASSs are non-transferrable.

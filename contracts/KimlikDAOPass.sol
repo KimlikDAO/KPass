@@ -3,12 +3,12 @@
 pragma solidity ^0.8.0;
 
 import {KPASS_DEPLOYER, KPASS_SIGNERS, PROTOCOL_FUND, VOTING} from "interfaces/Addresses.sol";
-import {Signature, IDIDSigners, END_TS_OFFSET, uint128x2} from "interfaces/IDIDSigners.sol";
+import {IDIDSigners, Signature, uint128x2} from "interfaces/IDIDSigners.sol";
 import {IERC20, IERC20Permit} from "interfaces/IERC20Permit.sol";
 import {IERC721} from "interfaces/IERC721.sol";
 
 /**
- * @title KimlikDAO Pass (KPASS) contract
+ * @title KPASS: KimlikDAO Pass
  *
  * KPASS is a decentralized identifier (DID) NFT which can be minted by
  * interacting with the KimlikDAO protocol. To interact with the protocol,
@@ -50,7 +50,7 @@ import {IERC721} from "interfaces/IERC721.sol";
  * thereafter.
  * The discount rate is set through the `updatePricesBulk()` method, which can
  * only be called by `VOTING`, the KimlikDAO voting contract.
- * (https://github.com/KimlikDAO/Voting)
+ * (https://github.com/KimlikDAO/ProtocolFund)
  *
  * Exposure report
  * ================
