@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import { readFileSync, writeFileSync } from "fs";
 import solc from "solc";
 import { parse } from "toml";
+import { TokenInfo, TokenData } from "@kimlikdao/lib/ethereum/KPass";
 
 const Foundry = parse(readFileSync("foundry.toml")).profile.default;
 
@@ -30,112 +31,6 @@ const ChainData = {
   "0xfa": ["rpc.ankr.com/fantom", "fantom", "FTM"],
   "0x144": ["mainnet.era.zksync.io", "ethereum", "ETH"]
 }
-
-/** @const {!Object<string, !Array<TokenInfo>>} */
-const TokenData = {
-  "0x1": [{
-    computed: 0.0006
-  }, /** @type {!TokenInfo} */({
-    address: "dAC17F958D2ee523a2206206994597C13D831ec7",
-    name: "Tether USD",
-    decimals: 6,
-    version: 0
-  }), /** @type {!TokenInfo} */({
-    address: "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-    name: "USD Coin",
-    decimals: 6,
-    version: 2
-  }), /** @type {!TokenInfo} */({
-    address: "2C537E5624e4af88A7ae4060C022609376C8D0EB",
-    name: "BiLira",
-    decimals: 6,
-    version: 0
-  }), /** @type {!TokenInfo} */({
-    address: "4Fabb145d64652a948d72533023f6E7A623C7C53",
-    name: "Binance USD",
-    decimals: 18,
-    version: 0
-  })
-  ],
-  "0xa86a": [
-    null, /** @type {!TokenInfo} */({
-      address: "9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7",
-      name: "TetherToken",
-      decimals: 6,
-      version: 1
-    }), /** @type {!TokenInfo} */({
-      address: "B97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
-      name: "USD Coin",
-      decimals: 6,
-      version: 2
-    }), /** @type {!TokenInfo} */({
-      address: "564A341Df6C126f90cf3ECB92120FD7190ACb401",
-      name: "BiLira",
-      decimals: 6,
-      version: 2
-    }), /** @type {!TokenInfo} */({
-      address: "9C9e5fD8bbc25984B178FdCE6117Defa39d2db39",
-      name: "BUSD Token",
-      decimals: 18,
-      version: 1
-    })
-  ],
-  "0x89": [
-    null, /** @type {!TokenInfo} */({
-      address: "c2132D05D31c914a87C6611C10748AEb04B58e8F",
-      name: "(PoS) Tether USD",
-      decimals: 6,
-      version: 0
-    }), /** @type {!TokenInfo} */({
-      address: "2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
-      name: "USD Coin (PoS)",
-      decimals: 6,
-      version: 1
-    }), /** @type {!TokenInfo} */({
-      address: "4Fb71290Ac171E1d144F7221D882BECAc7196EB5",
-      name: "BiLira",
-      decimals: 6,
-      version: 0
-    }), /** @type {!TokenInfo} */({
-      address: "9C9e5fD8bbc25984B178FdCE6117Defa39d2db39",
-      name: "BUSD Token",
-      decimals: 18,
-      version: 1
-    })
-  ],
-  "0xa4b1": [
-    null, /** @type {!TokenInfo} */({
-      address: "Fd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
-      name: "Tether USD",
-      decimals: 6,
-      version: 1
-    }), /** @type {!TokenInfo} */({
-      address: "FF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
-      name: "USD Coin (Arb1)",
-      decimals: 6,
-      version: 1
-    }), null, null
-  ],
-  "0x38": [
-    null, null, null, null, /** @type {!TokenInfo} */({
-      address: "e9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
-      name: "BUSD Token",
-      decimals: 18,
-      version: 0
-    }),
-  ],
-  "0x406": [
-    null, null, null, null, null
-  ],
-  "0xfa": [
-    null, null, /** @type {!TokenInfo} */({
-      address: "04068DA6C83AFCFA0e13ba15A6696662335D5B75",
-      name: "USD Coin",
-      decimals: 6,
-      version: 1
-    }), null, null
-  ],
-};
 
 /**
  * @param {ChainID}

@@ -2,19 +2,18 @@
 
 pragma solidity ^0.8.0;
 
-import {KDAO_ADDR, KPASS_SIGNERS, VOTING} from "interfaces/Addresses.sol";
+import {IERC20} from "interfaces/erc/IERC20.sol";
 import {
     IDIDSigners,
-    SIGNER_INFO_DEPOSIT_OFFSET,
-    SIGNER_INFO_END_TS_MASK,
-    SIGNER_INFO_END_TS_OFFSET,
-    SIGNER_INFO_WITHDRAW_MASK,
-    SIGNER_INFO_WITHDRAW_OFFSET,
-    Signature,
+    IDIDSignersExposureReport,
     SignerInfo,
-    uint128x2
-} from "interfaces/IDIDSigners.sol";
-import {IERC20} from "interfaces/IERC20.sol";
+    SignerInfoFrom
+} from "interfaces/kimlikdao/IDIDSigners.sol";
+import {KDAO as KDAO_ADDR, KPASS_SIGNERS, VOTING} from "interfaces/kimlikdao/addresses.sol";
+import {Signature} from "interfaces/types/Signature.sol";
+import {uint128x2} from "interfaces/types/uint128x2.sol";
+
+IERC20 constant KDAO = IERC20(KDAO_ADDR);
 
 /**
  * The contract by which KimlikDAO (i.e., KDAO holders) manage signer nodes.
@@ -25,7 +24,7 @@ import {IERC20} from "interfaces/IERC20.sol";
  *   S: Staked the required amount, and is an active signer.
  *   U: A signer started the unstake process, and is no longer a valid signer,
  *      but hasn't collected their staked KDAOs (plus excess) yet.
- *   F: A former signer which the `KPASSSigners` contract does not owe any
+ *   F: A former signer which the `KPassSigners` contract does not owe any
  *      KDAOs to. A signer ends up in this state either by getting slashed
  *      or voluntarily unstaking and then collecting their KDAOs.
  *
@@ -41,7 +40,7 @@ import {IERC20} from "interfaces/IERC20.sol";
  *
  * @author KimlikDAO
  */
-contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
+contract KPassSigners is IDIDSigners, IDIDSignersExposureReport, IERC20 {
     event SignerNodeJoin(address indexed signer, uint256 timestamp);
     event SignerNodeLeave(address indexed signer, uint256 timestamp);
     event SignerNodeSlash(address indexed signer, uint256 slashedAmount);
@@ -83,8 +82,8 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
     /**
      * Maps a jointDeposit event number to a bitpacked struct.
      *
-     * cumRate: How many TCKOs may be withdrawn for every CUM_RATE_MULTIPLIER
-     *          many TCKOs staked at the very beginning of this contract. While
+     * cumRate: How many KDAOs may be withdrawn for every CUM_RATE_MULTIPLIER
+     *          many KDAOs staked at the very beginning of this contract. While
      *          this tracks the cumulative rate for the initial signers, any
      *          other signer's cumulative rate can be calculated as a difference
      *          of two cumRate's. See `balanceOf()`.
@@ -114,7 +113,7 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
 
     ///////////////////////////////////////////////////////////////////////////
     //
-    // TCKO-st token interface
+    // KDAO-st token interface
     //
     ///////////////////////////////////////////////////////////////////////////
 
@@ -131,29 +130,28 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
     }
 
     function totalSupply() external view override returns (uint256) {
-        return IERC20(KDAO_ADDR).balanceOf(address(this));
+        return KDAO.balanceOf(address(this));
     }
 
     /**
-     * Returns the TCKO-st balance of a given address.
+     * Returns the KDAO-st balance of a given address.
      *
      * Note the balance of an account may increase without ever a `Transfer`
      * event firing for this account. This happens after a `jointDeposit()`
-     * or a slasing event, which distributes all the slashed TCKOs to active
+     * or a slasing event, which distributes all the slashed KDAOs to active
      * signers proportional to their initial stake.
      *
      * @param addr Address of the account whose balance is queried.
-     * @return The amount of TCKO-st tokens the address has.
+     * @return The amount of KDAO-st tokens the address has.
      */
     function balanceOf(address addr) public view returns (uint256) {
-        uint256 info = SignerInfo.unwrap(signerInfo[addr]);
+        SignerInfo info = signerInfo[addr];
+        if (info.isZero()) return 0;
+        if (info.hasEndTs()) return info.withdraw();
+        uint256 startTs = info.startTs();
+        uint256 n = jointDepositCount;
+        uint256 r = n;
         unchecked {
-            if (info == 0) return 0;
-            if (info & SIGNER_INFO_END_TS_MASK != 0) return uint48(info >> SIGNER_INFO_WITHDRAW_OFFSET);
-            uint256 startTs = uint64(info);
-            uint256 n = jointDepositCount;
-            uint256 r = n;
-
             for (uint256 l = 0; l < r;) {
                 uint256 m = r - ((r - l) >> 1);
                 if (uint64(jointDeposits[m]) > startTs) r = m - 1;
@@ -162,21 +160,22 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
             // Here we are using the fact that
             //   n > r => jointDeposits[n].timestamp > jointDeposits[r].timestamp
             uint256 cumulativeRate = r == 0 ? jointDeposits[n] : jointDeposits[n] - jointDeposits[r];
-            return (uint48(info >> 64) * (CUM_RATE_MULTIPLIER + (cumulativeRate >> 64))) / CUM_RATE_MULTIPLIER;
+            return (info.deposit() * (CUM_RATE_MULTIPLIER + (cumulativeRate >> 64)))
+                / CUM_RATE_MULTIPLIER;
         }
     }
 
     /**
-     * The amount of TCKOs a signer initially deposited.
+     * The amount of KDAOs a signer initially deposited.
      *
-     * Note depending of the status of the signer, these TCKOs may have been
+     * Note depending of the status of the signer, these KDAOs may have been
      * withdrawn, increased or even completely slashed.
      *
      * @param addr A signer node address
-     * @return The amount of TCKOs the signer deposited.
+     * @return The amount of KDAOs the signer deposited.
      */
     function depositBalanceOf(address addr) external view returns (uint256) {
-        return uint48(SignerInfo.unwrap(signerInfo[addr]) >> 64);
+        return signerInfo[addr].deposit();
     }
 
     function transfer(address, uint256) external pure override returns (bool) {
@@ -196,21 +195,22 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
     }
 
     /**
-     * Deposits an amount of TCKOs to each signer proportional to their initial
-     * TCKO stake.
+     * Deposits an amount of KDAOs to each signer proportional to their initial
+     * KDAO stake.
      *
-     * The sender must have approved this amount of TCKOs for use by the
-     * KPASSSigners contract beforehand.
+     * The sender must have approved this amount of KDAOs for use by the
+     * KimlikDAOPassSigners contract beforehand.
      *
      * @param amount The amount to deposit to signers
      */
     function jointDeposit(uint256 amount) external {
-        IERC20(KDAO_ADDR).transferFrom(msg.sender, address(this), amount);
+        KDAO.transferFrom(msg.sender, address(this), amount);
         unchecked {
             uint256 n = jointDepositCount;
             uint256 cumRate = jointDeposits[n] >> 64;
-            jointDeposits[n + 1] =
-                ((((CUM_RATE_MULTIPLIER * amount) / signerDepositBalance) + cumRate) << 64) | block.timestamp;
+            jointDeposits[n + 1] = (
+                (((CUM_RATE_MULTIPLIER * amount) / signerDepositBalance) + cumRate) << 64
+            ) | block.timestamp;
             jointDepositCount = n + 1;
         }
     }
@@ -222,7 +222,7 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
     ///////////////////////////////////////////////////////////////////////////
 
     /**
-     * Sets the TCKO amount required to qualify for the signer selection.
+     * Sets the KDAO amount required to qualify for the signer selection.
      *
      * Can only be set by the `VOTING` contract.
      *
@@ -274,23 +274,24 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
     /**
      * Marks a node as a validator as of the current blocktime, collecting
      * their staking deposit. The signer candidate must have approved this
-     * contract for `stakingDeposit` TCKOs beforehand.
+     * contract for `stakingDeposit` KDAOs beforehand.
      *
-     *   O ----`approveSignerNode(addr)`--> S    Approve `stakingDeposit` TCKOs
+     *   O ----`approveSignerNode(addr)`--> S    Approve `stakingDeposit` KDAOs
      *
      * @param addr Address of a node to be added to validator list.
      */
     function approveSignerNode(address addr) external {
         require(msg.sender == VOTING);
         // Ensure that `state(addr) == O`.
-        require(SignerInfo.unwrap(signerInfo[addr]) == 0);
+        require(signerInfo[addr].isZero());
         uint256 stakeAmount = stakingDeposit;
-        IERC20(KDAO_ADDR).transferFrom(addr, address(this), stakeAmount);
+        KDAO.transferFrom(addr, address(this), stakeAmount);
         unchecked {
-            uint256 color = uint256(keccak256(abi.encode(addr, block.timestamp))) << 224;
             signerDepositBalance += stakeAmount;
-            signerInfo[addr] = SignerInfo.wrap(color | (stakeAmount << 64) | block.timestamp);
         }
+        signerInfo[addr] = SignerInfoFrom(
+            uint256(keccak256(abi.encode(addr, block.timestamp))), stakeAmount, block.timestamp
+        );
         emit SignerNodeJoin(addr, block.timestamp);
         emit Transfer(address(this), addr, stakeAmount);
     }
@@ -299,46 +300,44 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
      * A signer node may unstake their balance at any time they wish; doing so
      * removes their address from the valid signer list immediately.
      *
-     * They can get their portion of the TCKOs back by calling the `withdraw()`
+     * They can get their portion of the KDAOs back by calling the `withdraw()`
      * method after 30 days.
      *
      *   S ----`unstake()`----------------> U
      *
      */
     function unstake() external {
-        uint256 info = SignerInfo.unwrap(signerInfo[msg.sender]);
+        SignerInfo info = signerInfo[msg.sender];
         // Ensure that `state(msg.sender) == S`.
-        require(info != 0 && (info & SIGNER_INFO_END_TS_MASK == 0));
+        require(!info.isZero() && !info.hasEndTs());
+        uint256 toWithdraw = balanceOf(msg.sender);
+        uint256 deposited = info.deposit();
         unchecked {
-            uint256 toWithdraw = balanceOf(msg.sender);
-            uint256 deposited = uint48(info >> 64);
             signerDepositBalance -= deposited;
-            signerInfo[msg.sender] = SignerInfo.wrap(
-                (toWithdraw << SIGNER_INFO_WITHDRAW_OFFSET) | (block.timestamp << SIGNER_INFO_END_TS_OFFSET) | info
-            );
         }
+        signerInfo[msg.sender] = info.addEndTs(block.timestamp).addWithdraw(toWithdraw);
         emit SignerNodeLeave(msg.sender, block.timestamp);
     }
 
     /**
-     * Returns back the staked TCKOs (plus excess) to its owner.
+     * Returns back the staked KDAOs (plus excess) to its owner.
      * May only be called 30 days after an `unstake()`.
      *
      *   U ----`withdraw()`---------------> F     30 days after `unstake()`
      *
      */
     function withdraw() external {
-        uint256 info = SignerInfo.unwrap(signerInfo[msg.sender]);
+        SignerInfo info = signerInfo[msg.sender];
+        uint256 endTs = info.endTs();
+        uint256 toWithdraw = info.withdraw();
+        // Ensure `state(msg.sender) == U`
+        require(toWithdraw != 0 && endTs != 0);
         unchecked {
-            uint256 endTs = uint64(info >> SIGNER_INFO_END_TS_OFFSET);
-            uint256 toWithdraw = uint48(info >> SIGNER_INFO_WITHDRAW_OFFSET);
-            // Ensure `state(msg.sender) == U`
-            require(toWithdraw != 0 && endTs != 0);
             require(block.timestamp > endTs + 30 days);
-            signerInfo[msg.sender] = SignerInfo.wrap(info & ~SIGNER_INFO_WITHDRAW_MASK);
-            IERC20(KDAO_ADDR).transfer(msg.sender, toWithdraw);
-            emit Transfer(msg.sender, address(this), toWithdraw);
         }
+        signerInfo[msg.sender] = info.clearWithdraw();
+        KDAO.transfer(msg.sender, toWithdraw);
+        emit Transfer(msg.sender, address(this), toWithdraw);
     }
 
     /**
@@ -352,23 +351,24 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
      */
     function slashSignerNode(address addr) external {
         require(msg.sender == VOTING);
-        uint256 info = SignerInfo.unwrap(signerInfo[addr]);
+        SignerInfo info = signerInfo[addr];
         unchecked {
             uint256 slashAmount = balanceOf(addr);
             uint256 signerBalanceLeft = signerDepositBalance;
             // The case `state(addr) == S`
-            if (info != 0 && info & SIGNER_INFO_END_TS_MASK == 0) {
-                signerInfo[addr] = SignerInfo.wrap((block.timestamp << SIGNER_INFO_END_TS_OFFSET) | info);
-                signerBalanceLeft -= uint48(info >> 64);
+            if (!info.isZero() && !info.hasEndTs()) {
+                signerInfo[addr] = info.addEndTs(block.timestamp);
+                signerBalanceLeft -= info.deposit();
                 signerDepositBalance = signerBalanceLeft;
             } else {
                 // The case `state(addr) == U`
-                signerInfo[addr] = SignerInfo.wrap(info & ~SIGNER_INFO_WITHDRAW_MASK); // Zero-out toWithdraw
+                signerInfo[addr] = info.clearWithdraw();
             }
             uint256 n = jointDepositCount;
             uint256 cumRate = jointDeposits[n] >> 64;
-            jointDeposits[n + 1] =
-                ((((CUM_RATE_MULTIPLIER * slashAmount) / signerBalanceLeft) + cumRate) << 64) | block.timestamp;
+            jointDeposits[n + 1] = (
+                (((CUM_RATE_MULTIPLIER * slashAmount) / signerBalanceLeft) + cumRate) << 64
+            ) | block.timestamp;
             jointDepositCount = n + 1;
 
             emit SignerNodeSlash(addr, slashAmount);
@@ -377,100 +377,115 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
         }
     }
 
-    function authenticateExposureReportID3Sigs(
-        bytes32 exposureReportID,
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // Signer authentication related fields and methods
+    //
+    ///////////////////////////////////////////////////////////////////////////
+
+    function _authenticate3Sigs(
+        bytes32 digest,
         uint128x2 stakeThresholdAndSignatureTs,
         Signature[3] calldata sigs
-    ) external view override {
-        uint256 signatureTs = uint128(uint128x2.unwrap(stakeThresholdAndSignatureTs));
-        bytes32 digest = keccak256(abi.encode(uint256(bytes32("\x19KimlikDAO hash\n")) | signatureTs, exposureReportID));
+    ) internal view {
+        uint256 signatureTs = stakeThresholdAndSignatureTs.lo();
         uint256 stake = 0;
         address[3] memory signer;
-        for (uint256 i = 0; i < 3; ++i) {
-            signer[i] = ecrecover(
-                digest,
-                uint8(sigs[i].yParityAndS >> 255) + 27,
-                sigs[i].r,
-                bytes32(sigs[i].yParityAndS & ((1 << 255) - 1))
-            );
-            uint256 info = SignerInfo.unwrap(signerInfo[signer[i]]);
-            uint256 endTs = uint64(info >> SIGNER_INFO_END_TS_OFFSET);
-            stake += uint64(info >> SIGNER_INFO_DEPOSIT_OFFSET);
-            require(info != 0 && uint64(info) <= signatureTs && (endTs == 0 || signatureTs < endTs));
+        unchecked {
+            for (uint256 i = 0; i < 3; ++i) {
+                signer[i] = ecrecover(
+                    digest, sigs[i].yParityAndS.yParity(), sigs[i].r, sigs[i].yParityAndS.s()
+                );
+                SignerInfo info = signerInfo[signer[i]];
+                uint256 endTs = info.endTs();
+                stake += info.deposit();
+                require(
+                    !info.isZero() && info.startTs() <= signatureTs
+                        && (endTs == 0 || signatureTs < endTs)
+                );
+            }
         }
-        uint256 stakeThreshold = uint128x2.unwrap(stakeThresholdAndSignatureTs) >> 128;
-        require(stakeThreshold == 0 || stake <= stakeThreshold);
+        require(stake >= stakeThresholdAndSignatureTs.hi());
         require(signer[0] != signer[1] && signer[0] != signer[2] && signer[1] != signer[2]);
     }
 
-    function authenticateHumanID3Sigs(
-        bytes32 humanID,
+    function _authenticate5Sigs(
+        bytes32 digest,
         uint128x2 stakeThresholdAndSignatureTs,
-        bytes32 commitmentR,
-        Signature[3] calldata sigs
-    ) external view override {
-        uint256 signatureTs = uint128(uint128x2.unwrap(stakeThresholdAndSignatureTs));
-        bytes32 digest = keccak256(
+        Signature[5] calldata sigs
+    ) internal view {
+        uint256 signatureTs = stakeThresholdAndSignatureTs.lo();
+        uint256 stake = 0;
+        address[5] memory signer;
+        unchecked {
+            for (uint256 i = 0; i < 5; ++i) {
+                signer[i] = ecrecover(
+                    digest, sigs[i].yParityAndS.yParity(), sigs[i].r, sigs[i].yParityAndS.s()
+                );
+                SignerInfo info = signerInfo[signer[i]];
+                uint256 endTs = info.endTs();
+                stake += info.deposit();
+                require(
+                    !info.isZero() && info.startTs() <= signatureTs
+                        && (endTs == 0 || signatureTs < endTs)
+                );
+            }
+        }
+        require(stake >= stakeThresholdAndSignatureTs.hi());
+        require(
+            signer[0] != signer[1] && signer[0] != signer[2] && signer[0] != signer[3]
+                && signer[0] != signer[4] && signer[1] != signer[2] && signer[1] != signer[3]
+                && signer[1] != signer[4] && signer[2] != signer[3] && signer[2] != signer[4]
+                && signer[3] != signer[4]
+        );
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // HumanIDv1 related fields and methods
+    //
+    ///////////////////////////////////////////////////////////////////////////
+
+    function getHumanIDv1Digest(bytes32 humanIDv1, uint256 signatureTs, bytes32 commitmentR)
+        public
+        view
+        returns (bytes32)
+    {
+        return keccak256(
             abi.encode(
                 uint256(bytes32("\x19KimlikDAO hash\n")) | signatureTs,
                 keccak256(abi.encodePacked(commitmentR, msg.sender)),
-                humanID
+                humanIDv1
             )
         );
-        uint256 stake = 0;
-        address[3] memory signer;
-        for (uint256 i = 0; i < 3; ++i) {
-            signer[i] = ecrecover(
-                digest,
-                uint8(sigs[i].yParityAndS >> 255) + 27,
-                sigs[i].r,
-                bytes32(sigs[i].yParityAndS & ((1 << 255) - 1))
-            );
-            uint256 info = SignerInfo.unwrap(signerInfo[signer[i]]);
-            uint256 endTs = uint64(info >> SIGNER_INFO_END_TS_OFFSET);
-            stake += uint64(info >> SIGNER_INFO_DEPOSIT_OFFSET);
-            require(info != 0 && uint64(info) <= signatureTs && (endTs == 0 || signatureTs < endTs));
-        }
-        uint256 stakeThreshold = uint128x2.unwrap(stakeThresholdAndSignatureTs) >> 128;
-        require(stakeThreshold == 0 || stake <= stakeThreshold);
-        require(signer[0] != signer[1] && signer[0] != signer[2] && signer[1] != signer[2]);
     }
 
-    function authenticateHumanID5Sigs(
-        bytes32 humanID,
+    function authenticateHumanIDv1(
+        bytes32 humanIDv1,
+        uint128x2 stakeThresholdAndSignatureTs,
+        bytes32 commitmentR,
+        Signature[3] calldata sigs
+    ) external view override returns (bool) {
+        _authenticate3Sigs(
+            getHumanIDv1Digest(humanIDv1, stakeThresholdAndSignatureTs.lo(), commitmentR),
+            stakeThresholdAndSignatureTs,
+            sigs
+        );
+        return true;
+    }
+
+    function authenticateHumanIDv1(
+        bytes32 humanIDv1,
         uint128x2 stakeThresholdAndSignatureTs,
         bytes32 commitmentR,
         Signature[5] calldata sigs
-    ) external view override {
-        uint256 signatureTs = uint128(uint128x2.unwrap(stakeThresholdAndSignatureTs));
-        bytes32 digest = keccak256(
-            abi.encode(
-                uint256(bytes32("\x19KimlikDAO hash\n")) | signatureTs,
-                keccak256(abi.encodePacked(commitmentR, msg.sender)),
-                humanID
-            )
+    ) external view override returns (bool) {
+        _authenticate5Sigs(
+            getHumanIDv1Digest(humanIDv1, stakeThresholdAndSignatureTs.lo(), commitmentR),
+            stakeThresholdAndSignatureTs,
+            sigs
         );
-        uint256 stake = 0;
-        address[5] memory signer;
-        for (uint256 i = 0; i < 5; ++i) {
-            signer[i] = ecrecover(
-                digest,
-                uint8(sigs[i].yParityAndS >> 255) + 27,
-                sigs[i].r,
-                bytes32(sigs[i].yParityAndS & ((1 << 255) - 1))
-            );
-            uint256 info = SignerInfo.unwrap(signerInfo[signer[i]]);
-            uint256 endTs = uint64(info >> SIGNER_INFO_END_TS_OFFSET);
-            stake += uint64(info >> SIGNER_INFO_DEPOSIT_OFFSET);
-            require(info != 0 && uint64(info) <= signatureTs && (endTs == 0 || signatureTs < endTs));
-        }
-        uint256 stakeThreshold = uint128x2.unwrap(stakeThresholdAndSignatureTs) >> 128;
-        require(stakeThreshold == 0 || stake <= stakeThreshold);
-        require(
-            signer[0] != signer[1] && signer[0] != signer[2] && signer[0] != signer[3] && signer[0] != signer[4]
-                && signer[1] != signer[2] && signer[1] != signer[3] && signer[1] != signer[4] && signer[2] != signer[3]
-                && signer[2] != signer[4] && signer[3] != signer[4]
-        );
+        return true;
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -480,14 +495,14 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
     ///////////////////////////////////////////////////////////////////////////
 
     /**
-     * @notice When a KPASS holder gets their wallet private key exposed
-     * they can either revoke their KPASS themselves, or use social revoking.
+     * @notice When a KPass holder gets their wallet private key exposed
+     * they can either revoke their KPass themselves, or use social revoking.
      *
-     * If they are unable to do either, they need to obtain a new KPASS (to a
+     * If they are unable to do either, they need to obtain a new KPass (to a
      * new address), with which they can file an exposure report via the
-     * `reportExposure()` method. Doing so invalidates all KPASSs across all
+     * `reportExposure()` method. Doing so invalidates all KPasses across all
      * chains and all addresses they have obtained before the timestamp of this
-     * newly obtained KPASS.
+     * newly obtained KPass.
      */
     event ExposureReport(bytes32 indexed exposureReportID, uint256 timestamp);
 
@@ -505,12 +520,18 @@ contract KimlikDAOPassSigners is IDIDSigners, IERC20 {
      *
      * @param exposureReportID of the person whose wallet keys were exposed.
      * @param signatureTs      of the exposureReportID signatures.
-     * @param signatures       Signer node signatures for the exposureReportID.
+     * @param sigs             Signer node signatures for the exposureReportID.
      */
-    function reportExposure(bytes32 exposureReportID, uint256 signatureTs, Signature[3] calldata signatures) external {
-        IDIDSigners(KPASS_SIGNERS).authenticateExposureReportID3Sigs(
-            exposureReportID, uint128x2.wrap(signatureTs), signatures
+    function reportExposure(
+        bytes32 exposureReportID,
+        uint256 signatureTs,
+        Signature[3] calldata sigs
+    ) external {
+        bytes32 digest = keccak256(
+            abi.encode(uint256(bytes32("\x19KimlikDAO hash\n")) | signatureTs, exposureReportID)
         );
+        _authenticate3Sigs(digest, uint128x2.wrap(signatureTs), sigs);
+
         // Exposure report timestamp can only be incremented.
         require(exposureReported[exposureReportID] < signatureTs);
         exposureReported[exposureReportID] = signatureTs;

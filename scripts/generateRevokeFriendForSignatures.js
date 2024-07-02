@@ -29,10 +29,10 @@ const EIP712Domain = [
   { "name": "verifyingContract", "type": "address" },
 ];
 
-const KPASSDomain = {
+const KPassDomain = {
   "name": "KPASS",
   "version": "1",
-  "chainId": "0x144",
+  "chainId": "0x1",
   "verifyingContract": KPASS
 };
 
@@ -43,7 +43,7 @@ const RevokeFriendForData = {
       { "name": "friend", "type": "address" },
     ]
   },
-  "domain": KPASSDomain,
+  "domain": KPassDomain,
   "primaryType": "RevokeFriendFor",
   "message": {
     "friend": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf"

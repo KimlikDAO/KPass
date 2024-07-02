@@ -2,17 +2,18 @@
 
 pragma solidity ^0.8.0;
 
-import "forge-std/Test.sol";
-import "interfaces/Addresses.sol";
-import {KimlikDAOPass, Signature} from "contracts/KimlikDAOPass.sol";
+import {KPass} from "../KPass.sol";
+import {Test} from "forge-std/Test.sol";
+import {KPASS, KPASS_DEPLOYER} from "interfaces/kimlikdao/addresses.sol";
+import {Signature, SignatureFrom} from "interfaces/types/Signature.sol";
 
-contract KimlikDAOPassRevokeTest is Test {
-    KimlikDAOPass private kpass;
+contract KPassRevokeTest is Test {
+    KPass private kpass;
 
     function setUp() public {
         vm.prank(KPASS_DEPLOYER);
-        kpass = new KimlikDAOPass();
-        assertEq(address(kpass), KPASS_ADDR);
+        kpass = new KPass();
+        assertEq(address(kpass), KPASS);
     }
 
     function testRevoke() public {
@@ -78,10 +79,9 @@ contract KimlikDAOPassRevokeTest is Test {
                 keccak256(abi.encode(REVOKE_FRIEND_FOR_TYPEHASH, vm.addr(0x1337ACC)))
             )
         );
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(10, digest);
-        Signature memory sig = Signature(r, (uint256(v - 27) << 255) | uint256(s));
         vm.prank(vm.addr(100));
-        kpass.revokeFriendFor(vm.addr(0x1337ACC), sig);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(10, digest);
+        kpass.revokeFriendFor(vm.addr(0x1337ACC), SignatureFrom(v, r, s));
 
         assertEq(kpass.balanceOf(vm.addr(0x1337ACC)), 1);
 
@@ -122,7 +122,7 @@ contract KimlikDAOPassRevokeTest is Test {
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(10, digest);
         vm.prank(vm.addr(100));
-        kpass.revokeFriendFor(vm.addr(0x1337ACC), Signature(r, (uint256(v - 27) << 255) | uint256(s)));
+        kpass.revokeFriendFor(vm.addr(0x1337ACC), SignatureFrom(v, r, s));
 
         assertEq(kpass.balanceOf(address(this)), 0);
     }
@@ -134,7 +134,8 @@ contract KimlikDAOPassRevokeTest is Test {
         kpass.createWithRevokers{value: 0.05 ether}(
             123123123,
             [
-                (uint256(3) << 192) | (uint256(3) << 160) | uint160(0x79883D9aCBc4aBac6d2d216693F66FcC5A0BcBC1),
+                (uint256(3) << 192) | (uint256(3) << 160)
+                    | uint160(0x79883D9aCBc4aBac6d2d216693F66FcC5A0BcBC1),
                 (uint256(1) << 160) | uint160(vm.addr(2)),
                 (uint256(1) << 160) | uint160(vm.addr(3)),
                 (uint256(1) << 160) | uint160(vm.addr(4)),
@@ -149,9 +150,10 @@ contract KimlikDAOPassRevokeTest is Test {
         vm.prank(vm.addr(0xDEAD));
         kpass.revokeFriendFor(
             vm.addr(1),
-            Signature(
-                0xb505ca4df9f2162ed93c434d95658985478c263341e883e572e0d2b5df915d28,
-                0x7626e3a897703a0f070bc496e91ffc8b6c96eb65e11d8ea6d611138d4dc27b01
+            SignatureFrom(
+                27,
+                0x736367bf8fe8d81358adee5404158e88550d28a75548acd43efb13fff8fa3182,
+                0x497f45925efcdaaea8fa4f8db06dd3a2ada67b0e47703b9193d8a8d3b1060e87
             )
         );
 

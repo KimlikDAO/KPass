@@ -2,22 +2,23 @@
 
 pragma solidity ^0.8.0;
 
-import "forge-std/Test.sol";
-import {KimlikDAOPassSigners} from "contracts/KimlikDAOPassSigners.sol";
-import {MockERC20Permit} from "interfaces/testing/MockTokens.sol";
-import {SignerInfo} from "interfaces/IDIDSigners.sol";
-import {KDAO_DEPLOYER, KPASS_SIGNERS_DEPLOYER, VOTING} from "interfaces/Addresses.sol";
+import {KPassSigners} from "../KPassSigners.sol";
+import {Test} from "forge-std/Test.sol";
+import {ERC20Permit as MockERC20Permit} from "interfaces/erc/mock/ERC20Permit.sol";
+import {SignerInfo} from "interfaces/kimlikdao/IDIDSigners.sol";
+import {KDAO_DEPLOYER, KPASS_SIGNERS_DEPLOYER, VOTING} from "interfaces/kimlikdao/addresses.sol";
+import {KDAO} from "interfaces/kimlikdao/mock/KDAO.sol";
 
-contract KimlikDAOPassSignersTest is Test {
+contract KPassSignersTest is Test {
     MockERC20Permit private kdao;
-    KimlikDAOPassSigners private kpassSigners;
+    KPassSigners private kpassSigners;
 
     function setUp() external {
         vm.prank(KDAO_DEPLOYER);
-        kdao = new MockERC20Permit("KDAO", "KDAO", 6);
+        kdao = new KDAO();
 
         vm.prank(KPASS_SIGNERS_DEPLOYER);
-        kpassSigners = new KimlikDAOPassSigners();
+        kpassSigners = new KPassSigners();
 
         vm.prank(VOTING);
         kpassSigners.setStakingDeposit(1e12);
@@ -32,7 +33,7 @@ contract KimlikDAOPassSignersTest is Test {
         }
     }
 
-    function testTCKOstInterface() external view {
+    function testKDAOstInterface() external view {
         assertEq(kpassSigners.name(), "Staked KDAO");
         assertEq(kpassSigners.symbol(), "KDAO-st");
         assertEq(kpassSigners.decimals(), kdao.decimals());
@@ -91,13 +92,17 @@ contract KimlikDAOPassSignersTest is Test {
         vm.prank(VOTING);
         kpassSigners.approveSignerNode(vm.addr(1));
 
-        assertEq(uint224(SignerInfo.unwrap(kpassSigners.signerInfo(vm.addr(1)))), (1e12 << 64) | 10001);
+        assertEq(
+            uint224(SignerInfo.unwrap(kpassSigners.signerInfo(vm.addr(1)))), (1e12 << 64) | 10001
+        );
 
         vm.warp(10002);
         vm.prank(VOTING);
         kpassSigners.approveSignerNode(vm.addr(2));
 
-        assertEq(uint224(SignerInfo.unwrap(kpassSigners.signerInfo(vm.addr(2)))), (1e12 << 64) | 10002);
+        assertEq(
+            uint224(SignerInfo.unwrap(kpassSigners.signerInfo(vm.addr(2)))), (1e12 << 64) | 10002
+        );
 
         vm.warp(10003);
         vm.prank(VOTING);
@@ -292,7 +297,9 @@ contract KimlikDAOPassSignersTest is Test {
         assertEq(kpassSigners.balanceOf(vm.addr(4)), 0);
         assertEq(kpassSigners.balanceOf(vm.addr(5)), expected1 - 15e12);
         assertEq(kpassSigners.balanceOf(vm.addr(6)), 0);
-        assertApproxEqAbs(kpassSigners.balanceOf(vm.addr(7)), expected1 - 15e12 - uint256(10e12) / 3, 5);
+        assertApproxEqAbs(
+            kpassSigners.balanceOf(vm.addr(7)), expected1 - 15e12 - uint256(10e12) / 3, 5
+        );
     }
 
     function testDepositBalanceOf() external {
@@ -345,7 +352,10 @@ contract KimlikDAOPassSignersTest is Test {
         vm.startPrank(VOTING);
         for (uint256 t = 1; t <= 5; ++t) {
             kpassSigners.approveSignerNode(vm.addr(t));
-            assertEq(uint224(SignerInfo.unwrap(kpassSigners.signerInfo(vm.addr(t)))), (1e12 << 64) | 10001);
+            assertEq(
+                uint224(SignerInfo.unwrap(kpassSigners.signerInfo(vm.addr(t)))),
+                (1e12 << 64) | 10001
+            );
         }
         vm.stopPrank();
 
@@ -353,7 +363,10 @@ contract KimlikDAOPassSignersTest is Test {
         vm.startPrank(VOTING);
         for (uint256 t = 6; t <= 10; t++) {
             kpassSigners.approveSignerNode(vm.addr(t));
-            assertEq(uint224(SignerInfo.unwrap(kpassSigners.signerInfo(vm.addr(t)))), (1e12 << 64) | 10002);
+            assertEq(
+                uint224(SignerInfo.unwrap(kpassSigners.signerInfo(vm.addr(t)))),
+                (1e12 << 64) | 10002
+            );
         }
         vm.stopPrank();
 
@@ -504,7 +517,9 @@ contract KimlikDAOPassSignersTest is Test {
         vm.stopPrank();
 
         assertEq(kpassSigners.balanceOf(vm.addr(2)), 0);
-        assertApproxEqAbs(kpassSigners.balanceOf(vm.addr(1)) + kpassSigners.balanceOf(vm.addr(3)), 25e11, 5);
+        assertApproxEqAbs(
+            kpassSigners.balanceOf(vm.addr(1)) + kpassSigners.balanceOf(vm.addr(3)), 25e11, 5
+        );
     }
 
     function testColorIsPreserved() external {
@@ -614,6 +629,8 @@ contract KimlikDAOPassSignersTest is Test {
 
         assertApproxEqAbs(kdao.balanceOf(vm.addr(21)), 20e12, 25);
         assertApproxEqAbs(kdao.balanceOf(vm.addr(22)), 20e12 + uint256(400e12) / 41, 20);
-        assertApproxEqAbs(kpassSigners.balanceOf(vm.addr(1)), 210e12 + (21 * uint256(20e12)) / 41, 20);
+        assertApproxEqAbs(
+            kpassSigners.balanceOf(vm.addr(1)), 210e12 + (21 * uint256(20e12)) / 41, 20
+        );
     }
 }

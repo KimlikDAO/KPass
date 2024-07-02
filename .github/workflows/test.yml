@@ -10,11 +10,13 @@ env:
   FOUNDRY_PROFILE: ci
 
 jobs:
-  check:
+  check_scroll:
+    env:
+      FOUNDRY_PROFILE: scroll
     strategy:
       fail-fast: true
 
-    name: Foundry project
+    name: KPass Scroll
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -26,18 +28,12 @@ jobs:
         with:
           version: nightly
 
-      - name: Run Forge build
+      - name: KPass Scroll
         run: |
-          forge --version
-          forge build --sizes
-        id: build
-
-      - name: Run Forge tests
-        run: |
-          forge test -vvv
+          forge t
         id: test
 
-      - name: Run Forge coverage
+      - name: KPass Scroll coverage
         run: |
           forge coverage
         id: coverage

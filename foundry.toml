@@ -1,12 +1,20 @@
 [fmt]
+line_length = 100
+single_line_statement_blocks = "single"
 sort_imports = true
 
 [profile.default]
-src = 'contracts'
-solc_version = "0.8.25"
+evm_version = "shanghai"
+sizes = true
+solc_version = "0.8.26"
 optimizer = true
 optimizer_runs = 10_000
-remappings = [
-  "forge-std/=lib/forge-std/src/",
-  "interfaces/=lib/interfaces/contracts/",
-]
+remappings = ["forge-std/=lib/forge-std/src/", "interfaces/=lib/interfaces/", "chain/=ethereum/"]
+test = "ethereum/test"
+
+[profile.ethereum]
+test = "ethereum/test"
+
+[profile.scroll]
+remappings = ["forge-std/=lib/forge-std/src/", "interfaces/=lib/interfaces/", "chain/=scroll/"]
+test = "scroll/test"
