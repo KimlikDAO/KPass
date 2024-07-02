@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: ["main"]
 
-env:
-  FOUNDRY_PROFILE: ci
-
 jobs:
   check_scroll:
     env:
@@ -34,6 +31,34 @@ jobs:
         id: test
 
       - name: KPass Scroll coverage
+        run: |
+          forge coverage
+        id: coverage
+
+  check_ethereum:
+    env:
+      FOUNDRY_PROFILE: ethereum
+    strategy:
+      fail-fast: true
+
+    name: KPass Ethereum
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: KPass Ethereum
+        run: |
+          forge t
+        id: test
+
+      - name: KPass Ethereum coverage
         run: |
           forge coverage
         id: coverage
