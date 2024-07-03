@@ -62,3 +62,23 @@ jobs:
         run: |
           forge coverage
         id: coverage
+
+  check_mina:
+    name: KPass Mina
+    strategy:
+      fail-fast: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+      - name:
+        run: |
+          cd mina
+          npm i
+          npm run build
+          npm run test
+          cd ..
